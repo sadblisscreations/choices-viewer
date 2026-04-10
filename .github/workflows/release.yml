@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Check out into a subdir so the package can be imported as "choices_viewer"
+          # Check out into a subdir so the package is importable as "choices_viewer"
           path: choices_viewer
 
       - uses: actions/setup-python@v5
@@ -26,14 +26,29 @@ jobs:
           pip install -r choices_viewer/requirements.txt
           pip install pyinstaller
 
+      - name: Create entry point and convert icon to .ico
+        run: |
+          @"
+          from choices_viewer.__main__ import main
+          if __name__ == '__main__':
+              main()
+          "@ | Out-File -Encoding utf8 run.py
+          python -c "
+          from PIL import Image
+          img = Image.open('choices_viewer/icon.png')
+          img.save('choices_viewer/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
+          "
+
       - name: Build Windows executable
         run: >
           pyinstaller
           --onefile
           --windowed
           --collect-all PyQt6
+          --add-data "choices_viewer/icon.png;."
+          --icon "choices_viewer/icon.ico"
           --name choices-viewer
-          choices_viewer/__main__.py
+          run.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -64,14 +79,19 @@ jobs:
           pip install -r choices_viewer/requirements.txt
           pip install pyinstaller
 
+      - name: Create entry point
+        run: |
+          printf 'from choices_viewer.__main__ import main\nif __name__ == "__main__":\n    main()\n' > run.py
+
       - name: Build Linux binary
         run: >
           pyinstaller
           --onefile
           --windowed
           --collect-all PyQt6
+          --add-data "choices_viewer/icon.png:."
           --name choices-viewer-linux
-          choices_viewer/__main__.py
+          run.py
 
       - uses: actions/upload-artifact@v4
         with:
