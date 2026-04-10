@@ -26,29 +26,37 @@ jobs:
           pip install -r choices_viewer/requirements.txt
           pip install pyinstaller
 
-      - name: Create entry point and convert icon to .ico
+      - name: Create entry point
+        shell: bash
         run: |
-          @"
-          from choices_viewer.__main__ import main
-          if __name__ == '__main__':
-              main()
-          "@ | Out-File -Encoding utf8 run.py
-          python -c "
+          printf 'from choices_viewer.__main__ import main\nif __name__ == "__main__":\n    main()\n' > run.py
+
+      - name: Convert icon PNG to ICO
+        shell: python
+        run: |
           from PIL import Image
-          img = Image.open('choices_viewer/icon.png')
-          img.save('choices_viewer/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
-          "
+          img = Image.open("choices_viewer/icon.png").convert("RGBA")
+          sizes = [(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)]
+          resized = [img.resize(s, Image.LANCZOS) for s in sizes]
+          resized[0].save(
+              "choices_viewer/icon.ico",
+              format="ICO",
+              append_images=resized[1:],
+              sizes=sizes,
+          )
+          print("ICO written OK")
 
       - name: Build Windows executable
-        run: >
-          pyinstaller
-          --onefile
-          --windowed
-          --collect-all PyQt6
-          --add-data "choices_viewer/icon.png;."
-          --icon "choices_viewer/icon.ico"
-          --name choices-viewer
-          run.py
+        shell: bash
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --collect-all PyQt6 \
+            --add-data "choices_viewer/icon.png;." \
+            --icon "choices_viewer/icon.ico" \
+            --name choices-viewer \
+            run.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -84,14 +92,14 @@ jobs:
           printf 'from choices_viewer.__main__ import main\nif __name__ == "__main__":\n    main()\n' > run.py
 
       - name: Build Linux binary
-        run: >
-          pyinstaller
-          --onefile
-          --windowed
-          --collect-all PyQt6
-          --add-data "choices_viewer/icon.png:."
-          --name choices-viewer-linux
-          run.py
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --collect-all PyQt6 \
+            --add-data "choices_viewer/icon.png:." \
+            --name choices-viewer-linux \
+            run.py
 
       - uses: actions/upload-artifact@v4
         with:
