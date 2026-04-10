@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image as PILImage
 
-from PyQt6.QtCore import QBuffer
-from PyQt6.QtGui import QImage, QRect, QTransform
+from PyQt6.QtCore import QBuffer, QRect
+from PyQt6.QtGui import QImage, QTransform
 
 from .plist_parser import parse_plist
 from .compositing import CUSTOM_LAYER_ORDER, SLOT_LABELS, LAYER_ORDER
