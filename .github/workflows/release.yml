@@ -31,21 +31,6 @@ jobs:
         run: |
           printf 'from choices_viewer.__main__ import main\nif __name__ == "__main__":\n    main()\n' > run.py
 
-      - name: Convert icon PNG to ICO
-        shell: python
-        run: |
-          from PIL import Image
-          img = Image.open("choices_viewer/icon.png").convert("RGBA")
-          sizes = [(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)]
-          resized = [img.resize(s, Image.LANCZOS) for s in sizes]
-          resized[0].save(
-              "choices_viewer/icon.ico",
-              format="ICO",
-              append_images=resized[1:],
-              sizes=sizes,
-          )
-          print("ICO written OK")
-
       - name: Build Windows executable
         shell: bash
         run: |
