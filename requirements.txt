@@ -2,3 +2,4 @@ PyQt6
 Pillow
 numpy
 pytoshop
+six
