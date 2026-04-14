@@ -148,7 +148,8 @@ class GifSaveWorker(QThread):
     def __init__(self, atlas_path: Path, sprites: dict,
                  canvas_w: int, canvas_h: int,
                  layer_order: list, layer_frames: dict,
-                 frame_count: int, fps: int, path: str):
+                 frame_count: int, fps: int, path: str,
+                 frame_offset: int = 1):
         super().__init__()
         self._atlas_path   = atlas_path
         self._sprites      = sprites
@@ -159,6 +160,7 @@ class GifSaveWorker(QThread):
         self._frame_count  = frame_count
         self._fps          = max(1, fps)
         self._path         = path
+        self._frame_offset = frame_offset
 
     def run(self):
         try:
@@ -169,6 +171,7 @@ class GifSaveWorker(QThread):
                 pix = composite_sheet_frame(
                     atlas, self._sprites, self._canvas_w, self._canvas_h,
                     self._layer_order, self._layer_frames, i,
+                    self._frame_offset,
                 )
                 if pix and not pix.isNull():
                     arr = _qimage_to_rgba(pix.toImage())
@@ -201,7 +204,8 @@ class SheetPsdSaveWorker(QThread):
     def __init__(self, atlas_path: Path, sprites: dict,
                  canvas_w: int, canvas_h: int,
                  layer_order: list, layer_frames: dict,
-                 frame_count: int, path: str):
+                 frame_count: int, path: str,
+                 frame_offset: int = 1):
         super().__init__()
         self._atlas_path   = atlas_path
         self._sprites      = sprites
@@ -211,6 +215,7 @@ class SheetPsdSaveWorker(QThread):
         self._layer_frames = layer_frames
         self._frame_count  = frame_count
         self._path         = path
+        self._frame_offset = frame_offset
 
     def run(self):
         try:
@@ -220,6 +225,7 @@ class SheetPsdSaveWorker(QThread):
                     self._atlas_path, self._sprites,
                     self._canvas_w, self._canvas_h,
                     self._layer_order, self._layer_frames, i,
+                    self._frame_offset,
                 )
                 if ldata:
                     groups.append((f"Frame {i + 1:03d}", ldata))

@@ -91,6 +91,90 @@ def discover_custom_items(assets: Path) -> dict:
     return result
 
 
+def discover_portrait_layers(assets: Path) -> dict:
+    """
+    Returns non-custom portrait characters in the same format as
+    discover_custom_items(): {char_type: {slot: [(label, plist_path, png_path)]}}
+
+    Groups portraits by role (portrait_male, portrait_female, etc.) and maps
+    each portrait's sprite keys to custom builder slots so they can be mixed
+    in the Custom tab.
+    """
+    from .plist_parser import parse_plist
+
+    _KEY_SLOT = {
+        "BODY.png":   "body",
+        "HAIR_B.png": "hair_b",
+        "HAIR_F.png": "hair_f",
+        "PROP_F.png": "prop_f",
+        "PROP_B.png": "prop_b",
+        "ACC_F.png":  "acc",
+        "ACC_B.png":  "acc",
+    }
+
+    portrait_dir = assets / "portraits_large" / "non_custom" / "2x"
+    if not portrait_dir.exists():
+        return {}
+
+    # {char_type: {slot: {base_name: (version, label, plist, png)}}}
+    seen: dict = {}
+
+    for plist in sorted(portrait_dir.glob("*.plist")):
+        png = plist.with_suffix(".png")
+        if not png.exists():
+            continue
+
+        stem = plist.stem
+        m = re.match(r"^(.*)-v(\d+)$", stem)
+        base_name = m.group(1) if m else stem
+        version   = int(m.group(2)) if m else 0
+
+        parts = base_name.split("_")
+        if len(parts) < 3 or parts[0] != "portrait":
+            continue
+
+        # parts[1] = book, parts[2] = role, parts[3:] = character name
+        book      = parts[1]
+        role      = parts[2]
+        char_type = f"portrait_{role}"
+
+        name_parts = parts[3:]
+        if name_parts:
+            label = f"{book.title()} - {' '.join(name_parts).title()}"
+        else:
+            label = f"{book.title()} {role.title()}"
+
+        try:
+            sprites = parse_plist(plist)
+        except Exception:
+            continue
+
+        present_slots: set = set()
+        for key in sprites:
+            if key in _KEY_SLOT:
+                present_slots.add(_KEY_SLOT[key])
+            elif key.startswith("FACE_"):
+                present_slots.add("face")
+
+        if not present_slots:
+            continue
+
+        ct_dict = seen.setdefault(char_type, {})
+        for slot in present_slots:
+            slot_dict = ct_dict.setdefault(slot, {})
+            existing  = slot_dict.get(base_name)
+            if existing is None or version > existing[0]:
+                slot_dict[base_name] = (version, label, plist, png)
+
+    result: dict = {}
+    for ct, slots in seen.items():
+        result[ct] = {}
+        for slot, items_dict in slots.items():
+            entries = sorted(items_dict.values(), key=lambda x: x[1])
+            result[ct][slot] = [(lbl, p, n) for _, lbl, p, n in entries]
+    return result
+
+
 def discover_spritesheets(assets: Path) -> list:
     """Return [(display_name, plist_path, png_path)] sorted by display_name."""
     sheet_dir = assets / "ccbi_spritesheets" / "large"

@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 
-from .assets import discover_custom_items, discover_spritesheets, find_characters
+from .assets import discover_custom_items, discover_portrait_layers, discover_spritesheets, find_characters
 from .config import load_config, resource_path, save_config
 from .assets import validate_dlc_path
 from .style import BASE_STYLE
@@ -47,7 +47,7 @@ def main():
         save_config({"dlc_path": dlg.chosen_raw_path()})
 
     characters   = find_characters(assets)
-    custom_items = discover_custom_items(assets)
+    custom_items = {**discover_custom_items(assets), **discover_portrait_layers(assets)}
     sheets       = discover_spritesheets(assets)
 
     if not characters and not custom_items and not sheets:

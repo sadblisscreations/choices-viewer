@@ -32,6 +32,7 @@ class EffectsTab(QWidget):
         self._layer_frames = {}
         self._frame_count  = 1
         self._frame_idx    = 0
+        self._frame_offset = 1
         self._playing      = False
         self._save_worker  = None
 
@@ -208,12 +209,18 @@ class EffectsTab(QWidget):
         self._atlas_path = png
         sprites = parse_plist(plist)
         self._sprites = sprites
-        cw, ch, fc, lo, lf = analyze_spritesheet(sprites)
+        # Derive CCBI path: assets/ccbi/{sheet_name}.ccbi lives two levels up
+        # from assets/ccbi_spritesheets/large/{sheet_name}.plist.
+        ccbi_path = plist.parent.parent.parent / "ccbi" / (plist.stem + ".ccbi")
+        if not ccbi_path.exists():
+            ccbi_path = None
+        cw, ch, fc, lo, lf, fo = analyze_spritesheet(sprites, ccbi_path)
         self._canvas_w     = cw
         self._canvas_h     = ch
         self._frame_count  = fc
         self._layer_order  = lo
         self._layer_frames = lf
+        self._frame_offset = fo
         self._frame_idx    = 0
 
         self._title_lbl.setText(current.text())
@@ -238,6 +245,7 @@ class EffectsTab(QWidget):
         pix   = composite_sheet_frame(
             atlas, self._sprites, self._canvas_w, self._canvas_h,
             self._layer_order, self._layer_frames, self._frame_idx,
+            self._frame_offset,
         )
         self._preview.setSourcePixmap(pix)
         self._frame_num_lbl.setText(f"{self._frame_idx + 1} / {self._frame_count}")
@@ -327,6 +335,7 @@ class EffectsTab(QWidget):
             pix = composite_sheet_frame(
                 atlas, self._sprites, self._canvas_w, self._canvas_h,
                 self._layer_order, self._layer_frames, self._frame_idx,
+                self._frame_offset,
             )
             if pix and not pix.isNull():
                 pix.save(path, "PNG")
@@ -344,6 +353,7 @@ class EffectsTab(QWidget):
             pix = composite_sheet_frame(
                 atlas, self._sprites, self._canvas_w, self._canvas_h,
                 self._layer_order, self._layer_frames, self._frame_idx,
+                self._frame_offset,
             )
             if pix and not pix.isNull():
                 arr = _qimage_to_rgba(pix.toImage())
@@ -363,6 +373,7 @@ class EffectsTab(QWidget):
                 self._atlas_path, self._sprites,
                 self._canvas_w, self._canvas_h,
                 self._layer_order, self._layer_frames, self._frame_idx,
+                self._frame_offset,
             )
             if ldata:
                 write_layered_psd([("", ldata)], self._canvas_w, self._canvas_h, path)
@@ -387,6 +398,7 @@ class EffectsTab(QWidget):
                 pix = composite_sheet_frame(
                     atlas, self._sprites, self._canvas_w, self._canvas_h,
                     self._layer_order, self._layer_frames, i,
+                    self._frame_offset,
                 )
                 if pix and not pix.isNull():
                     pix.save(str(Path(folder) / f"{safe}_frame_{i+1:03d}.png"), "PNG")
@@ -409,6 +421,7 @@ class EffectsTab(QWidget):
                 self._canvas_w, self._canvas_h,
                 self._layer_order, self._layer_frames,
                 self._frame_count, self._fps(), path,
+                self._frame_offset,
             )
             self._save_worker.done.connect(self._on_gif_done)
             self._save_worker.start()
@@ -428,6 +441,7 @@ class EffectsTab(QWidget):
                 self._canvas_w, self._canvas_h,
                 self._layer_order, self._layer_frames,
                 self._frame_count, path,
+                self._frame_offset,
             )
             self._save_worker.done.connect(self._on_psd_done)
             self._save_worker.start()

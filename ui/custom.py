@@ -269,16 +269,13 @@ class CustomBuilderTab(QWidget):
             combo.blockSignals(True)
             combo.clear()
             items = slots.get(slot, [])
-            if slot in CUSTOM_OPTIONAL:
-                combo.addItem("— None —", None)
+            combo.addItem("— None —", None)
             if items:
                 for label, plist, png in items:
                     combo.addItem(label, (plist, png))
                 combo.setEnabled(True)
             else:
-                if slot not in CUSTOM_OPTIONAL:
-                    combo.addItem("(not available)", None)
-                combo.setEnabled(slot in CUSTOM_OPTIONAL)
+                combo.setEnabled(False)
             combo.blockSignals(False)
 
         self._schedule_refresh()

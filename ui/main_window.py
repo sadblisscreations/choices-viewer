@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QDialog, QMainWindow, QMessageBox, QTabWidget,
 )
 
-from ..assets import find_characters, discover_custom_items, discover_spritesheets
+from ..assets import find_characters, discover_custom_items, discover_portrait_layers, discover_spritesheets
 from ..config import load_config, save_config
 from ..style import BASE_STYLE
 from .dialogs import FolderPickerDialog
@@ -66,5 +66,8 @@ class MainWindow(QMainWindow):
             return
         self._assets = assets
         self._chars_tab.refresh(assets, chars)
-        self._custom_tab.update_assets(assets, discover_custom_items(assets))
+        self._custom_tab.update_assets(
+            assets,
+            {**discover_custom_items(assets), **discover_portrait_layers(assets)},
+        )
         self._effects_tab.update_assets(assets, discover_spritesheets(assets))

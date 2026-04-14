@@ -8,7 +8,7 @@ from PyQt6.QtCore import QBuffer, QRect
 from PyQt6.QtGui import QImage, QTransform
 
 from .plist_parser import parse_plist
-from .compositing import CUSTOM_LAYER_ORDER, SLOT_LABELS, LAYER_ORDER
+from .compositing import CUSTOM_LAYER_ORDER, SLOT_LABELS, LAYER_ORDER, resolve_sprite_key
 
 
 def _qimage_to_rgba(qimg: QImage) -> np.ndarray:
@@ -112,10 +112,8 @@ def extract_custom_layers(selections: dict, emotion: str):
             continue
         plist_path, png_path = item
         sprites = parse_plist(plist_path)
-        key = f"{emotion}.png" if slot == "face" else "NEUTRAL.png"
-        if key not in sprites:
-            key = "NEUTRAL.png"
-        if key not in sprites:
+        key = resolve_sprite_key(sprites, slot, emotion)
+        if key is None:
             continue
         sx, sy, sw, sh, ox, oy, ow, oh, rotated = sprites[key]
         canvas_w = max(canvas_w, round(ow))
@@ -144,22 +142,22 @@ def extract_sheet_frame_layers(
     atlas_path: Path, sprites: dict,
     canvas_w: int, canvas_h: int,
     layer_order: list, layer_frames: dict,
-    frame_idx: int,
+    frame_idx: int, frame_offset: int = 1,
 ) -> list:
     """Return [(layer_name, QImage_tile, px, py)] for a single animation frame."""
-    frame_num = frame_idx + 1
+    frame_num = frame_idx + frame_offset
     atlas = QImage(str(atlas_path))
     result = []
     for base in layer_order:
         fmap = layer_frames[base]
         if frame_num in fmap:
             sprite_name = fmap[frame_num]
-        elif 0 in fmap:
-            sprite_name = fmap[0]
+        elif None in fmap:
+            sprite_name = fmap[None]
         else:
-            avail = sorted(k for k in fmap if k <= frame_num)
+            avail = sorted(k for k in fmap if k is not None and k <= frame_num)
             if not avail:
-                avail = sorted(fmap)
+                avail = sorted(k for k in fmap if k is not None)
             sprite_name = fmap[avail[-1]]
 
         sx, sy, sw, sh, ox, oy, ow, oh, rotated = sprites[sprite_name]
