@@ -1,13 +1,12 @@
 import time
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtCore import QRect
+from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QImage, QPainter, QColor
 from PyQt6.QtWidgets import (
     QFileDialog, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMessageBox, QPushButton,
-    QSizePolicy, QSlider, QSplitter, QVBoxLayout, QWidget,
+    QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
 from ..ccbi import CANVAS_W, CANVAS_H, setup_scene, render_scene_to_image, TextureCache
@@ -33,8 +32,6 @@ class ScenePreview(QWidget):
         self._scene = setup_scene(ccbi_path, bg_dir, tex_dir)
         self._texcache = TextureCache(tex_dir)
         self._last_time = time.perf_counter()
-        if self._scene:
-            self._scene["pan"] = 0
         self.update()
 
     def restart(self):
@@ -46,20 +43,6 @@ class ScenePreview(QWidget):
 
     def start_animation(self):
         self._last_time = time.perf_counter()
-
-    def set_pan(self, pan: int):
-        if self._scene:
-            self._scene["pan"] = max(0, min(self._scene["pan_max"], pan))
-            self.update()
-
-    def get_pan(self) -> int:
-        return self._scene["pan"] if self._scene else 0
-
-    def get_pan_max(self) -> int:
-        return self._scene["pan_max"] if self._scene else 0
-
-    def is_wide(self) -> bool:
-        return self._scene["is_wide"] if self._scene else False
 
     def particle_count(self) -> int:
         return self._particle_count
@@ -196,24 +179,6 @@ class ScenesTab(QWidget):
         ctrl_row.addStretch()
         rv.addLayout(ctrl_row)
 
-        # Pan slider
-        slider_row = QHBoxLayout()
-        slider_row.setSpacing(6)
-        pan_lbl = QLabel("Pan:")
-        pan_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
-        self._pan_slider = QSlider(Qt.Orientation.Horizontal)
-        self._pan_slider.setMinimum(0)
-        self._pan_slider.setMaximum(0)
-        self._pan_slider.setEnabled(False)
-        self._pan_slider.valueChanged.connect(self._on_pan_changed)
-        self._pan_val_lbl = QLabel("0")
-        self._pan_val_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
-        self._pan_val_lbl.setFixedWidth(40)
-        slider_row.addWidget(pan_lbl)
-        slider_row.addWidget(self._pan_slider, stretch=1)
-        slider_row.addWidget(self._pan_val_lbl)
-        rv.addLayout(slider_row)
-
         rv.addWidget(separator())
 
         # Save bar
@@ -248,26 +213,12 @@ class ScenesTab(QWidget):
         try:
             self._preview.set_scene(ccbi_path, bg_dir, tex_dir)
             self._preview.start_animation()
-            self._update_controls()
+            self._save_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.warning(self, "Error Loading Scene", f"Failed to parse CCBI file:\n{ccbi_path.name}\n\n{e}")
             self._preview._scene = None
             self._preview.update()
             self._save_btn.setEnabled(False)
-
-    def _update_controls(self):
-        is_wide = self._preview.is_wide()
-        self._pan_slider.setEnabled(is_wide)
-        self._pan_slider.blockSignals(True)
-        self._pan_slider.setMaximum(self._preview.get_pan_max())
-        self._pan_slider.setValue(self._preview.get_pan())
-        self._pan_slider.blockSignals(False)
-        self._pan_val_lbl.setText(str(self._preview.get_pan()))
-        self._save_btn.setEnabled(True)
-
-    def _on_pan_changed(self, value: int):
-        self._preview.set_pan(value)
-        self._pan_val_lbl.setText(str(value))
 
     def _prev_scene(self):
         row = self._list.currentRow()
@@ -281,7 +232,6 @@ class ScenesTab(QWidget):
 
     def _restart(self):
         self._preview.restart()
-        self._update_controls()
 
     def _on_tick(self):
         self._preview.tick()
@@ -292,7 +242,6 @@ class ScenesTab(QWidget):
             seqs = ", ".join(self._preview.scene_seqs()[:3]) or "none"
             self._info_lbl.setText(
                 f"Emitters: {total} (active {active})  •  Particles: {parts}  •  Seqs: {seqs}"
-                + ("  •  Use slider to pan" if self._preview.is_wide() else "")
             )
 
     def _save_frame(self):

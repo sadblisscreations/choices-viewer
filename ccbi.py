@@ -619,7 +619,7 @@ def setup_scene(ccbi_path: Path, bg_dir: Path, tex_dir: Path) -> dict:
 
     bg = bg_raw.scaled(full_w, full_h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
-    ox = (CANVAS_W - full_w) // 2 if not is_wide else 0
+    ox = (CANVAS_W - full_w) // 2
     oy = (CANVAS_H - full_h) // 2
 
     design_h = native_h / 2
@@ -640,16 +640,9 @@ def setup_scene(ccbi_path: Path, bg_dir: Path, tex_dir: Path) -> dict:
             sy = oy + (1.0 - pct_y / 100.0) * full_h
         emitters.append(Emitter(c, sx, sy, ptf))
 
-    pan_max = max(0, full_w - CANVAS_W) if is_wide else 0
-
     return {
         "bg": bg,
         "emitters": emitters,
-        "is_wide": is_wide,
-        "pan_max": pan_max,
-        "pan": 0,
-        "full_w": full_w,
-        "full_h": full_h,
         "ox": ox,
         "oy": oy,
         "seqs": [s["name"] for s in data["sequences"]],
@@ -664,21 +657,12 @@ def render_scene_to_image(canvas: QImage, scene: dict, texcache: TextureCache) -
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
     canvas.fill(QColor(15, 15, 26))
-    pan = scene["pan"]
     bg = scene["bg"]
-    is_wide = scene["is_wide"]
     ox = scene["ox"]
     oy = scene["oy"]
 
-    if is_wide:
-        painter.drawImage(-pan, 0, bg)
-    else:
-        painter.drawImage(ox, oy, bg)
-
-    if is_wide:
-        painter.setClipRect(0, 0, CANVAS_W, scene["full_h"])
-    else:
-        painter.setClipRect(ox, oy, scene["full_w"], scene["full_h"])
+    painter.drawImage(ox, oy, bg)
+    painter.setClipRect(ox, oy, bg.width(), bg.height())
 
     total = 0
     for em in scene["emitters"]:
@@ -687,7 +671,7 @@ def render_scene_to_image(canvas: QImage, scene: dict, texcache: TextureCache) -
                 continue
             sz = max(4, int(p.sz))
             sz = min(sz, 512)
-            px = int(p.x) - pan if is_wide else int(p.x)
+            px = int(p.x)
             py = int(p.y)
             hsz = sz // 2
             surf = texcache.get(em.tex, sz, p.r, p.g, p.b, p.a, em.additive)
