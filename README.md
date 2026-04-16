@@ -54,3 +54,8 @@ pyinstaller --onefile --windowed --name choices-viewer choices_viewer/__main__.p
 ```
 
 The executable will be in the `dist/` folder.
+
+## Contributors
+
+- [sadblisscreations](https://github.com/sadblisscreations)
+- [Kimi](https://github.com/moonshot-ai) (Books tab / branching story graph, parser improvements, UI polish)
