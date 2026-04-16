@@ -5,7 +5,7 @@ from PIL import Image as PILImage
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 
-from .plist_parser import parse_plist
+from .parsers.plist_parser import parse_plist
 from .compositing import composite, composite_custom, composite_sheet_frame, EMOTIONS
 from .psd import (
     write_layered_psd, extract_sprite_layers, extract_custom_layers,

@@ -100,7 +100,7 @@ def discover_portrait_layers(assets: Path) -> dict:
     each portrait's sprite keys to custom builder slots so they can be mixed
     in the Custom tab.
     """
-    from .plist_parser import parse_plist
+    from .parsers.plist_parser import parse_plist
 
     _KEY_SLOT = {
         "BODY.png":   "body",
@@ -178,7 +178,7 @@ def discover_portrait_layers(assets: Path) -> dict:
 def discover_ccbi_scenes(assets: Path) -> list:
     """Return [(display_name, ccbi_path)] sorted by display_name.
     Only includes files that pass a full parse."""
-    from .ccbi import parse_ccbi_file
+    from .parsers.ccbi_parser import parse_ccbi_file
 
     ccbi_dir = assets / "ccbi"
     if not ccbi_dir.exists():

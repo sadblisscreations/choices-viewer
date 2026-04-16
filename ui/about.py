@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..config import resource_path
-from ..style import BG, TEXT
+from .style import BG, TEXT
 
 
 class AboutTab(QWidget):

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..assets import validate_dlc_path, portrait_dirs
-from ..style import BASE_STYLE, TEXT
+from .style import BASE_STYLE, TEXT
 
 
 class FolderPickerDialog(QDialog):

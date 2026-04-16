@@ -8,17 +8,17 @@ from PyQt6.QtWidgets import (
     QScrollArea, QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
-from ..plist_parser import parse_plist
+from ..parsers.plist_parser import parse_plist
 from ..psd import extract_sprite_layers, write_layered_psd
 from ..workers import LoadWorker, SaveAllWorker
-from ..style import EMOTION_COLORS, TEXT
+from .style import EMOTION_COLORS, TEXT
 from . import separator
 
 
 class EmotionCard(QWidget):
     CARD_WIDTH = 200
 
-    def __init__(self, emotion: str, pixmap, parent=None):
+    def __init__(self, emotion: str, pixmap, on_save=None, parent=None):
         super().__init__(parent)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
@@ -54,6 +54,20 @@ class EmotionCard(QWidget):
         lay.addWidget(img)
         lay.addWidget(badge, alignment=Qt.AlignmentFlag.AlignHCenter)
 
+        if on_save:
+            save_btn = QPushButton("Save")
+            save_btn.setFixedSize(48, 20)
+            save_btn.setStyleSheet(
+                "QPushButton { background: #2b2b2b; color: #e0e0e0; "
+                "border-top: 1px solid #5c5c5c; border-left: 1px solid #5c5c5c; "
+                "border-right: 1px solid #0a0a0a; border-bottom: 1px solid #0a0a0a; "
+                "font-size: 10px; padding: 0; }"
+                "QPushButton:pressed { border-top: 1px solid #0a0a0a; border-left: 1px solid #0a0a0a; "
+                "border-right: 1px solid #5c5c5c; border-bottom: 1px solid #5c5c5c; }"
+            )
+            save_btn.clicked.connect(lambda _checked, e=emotion: on_save(e))
+            lay.addWidget(save_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+
 
 class CharacterPanel(QScrollArea):
     def __init__(self):
@@ -75,7 +89,7 @@ class CharacterPanel(QScrollArea):
         lbl.setStyleSheet("color: #808080; font-size: 12px; padding: 12px; background: transparent;")
         self._vbox.insertWidget(1, lbl)
 
-    def show_emotions(self, name: str, results: list):
+    def show_emotions(self, name: str, results: list, on_save=None):
         self._clear()
         self._insert_title(name)
         row_w = QWidget()
@@ -85,7 +99,7 @@ class CharacterPanel(QScrollArea):
         row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         if results:
             for emotion, pix in results:
-                row.addWidget(EmotionCard(emotion, pix))
+                row.addWidget(EmotionCard(emotion, pix, on_save))
         else:
             lbl = QLabel("No renderable layers found for this character.")
             lbl.setStyleSheet("color: #808080; font-size: 12px; padding: 12px; background: transparent;")
@@ -237,8 +251,44 @@ class CharactersTab(QWidget):
     def _on_loaded(self, name: str, results: list):
         self._current_name    = name
         self._current_results = results
-        self._panel.show_emotions(name, results)
+        self._panel.show_emotions(name, results, self._save_emotion)
         self._save_btn.setEnabled(bool(results))
+
+    def _save_emotion(self, emotion: str):
+        pix = None
+        for em, p in self._current_results:
+            if em == emotion:
+                pix = p
+                break
+        if not pix or pix.isNull():
+            return
+        fmt  = self._fmt_combo.currentText()
+        safe = re.sub(r'[<>:"/\\|?*]', "_", f"{self._current_name}_{emotion}")
+
+        if fmt == "PSD":
+            path, _ = QFileDialog.getSaveFileName(
+                self, f"Save '{self._current_name}' {emotion} as PSD",
+                str(Path.home() / f"{safe}.psd"), "Photoshop PSD (*.psd)"
+            )
+            if not path:
+                return
+            sprites = parse_plist(self._current_plist)
+            w, h, ldata = extract_sprite_layers(self._current_png, sprites, emotion)
+            if ldata:
+                write_layered_psd([("", ldata)], w, h, path)
+            QMessageBox.information(self, "Saved", f"Saved layered PSD to:\n{path}")
+        else:
+            ext = "png" if fmt == "PNG" else "jpg"
+            path, _ = QFileDialog.getSaveFileName(
+                self, f"Save '{self._current_name}' {emotion}",
+                str(Path.home() / f"{safe}.{ext}"),
+                "PNG Image (*.png);;JPEG Image (*.jpg)"
+            )
+            if not path:
+                return
+            out_fmt = "JPEG" if path.lower().endswith(".jpg") else "PNG"
+            pix.save(path, out_fmt, 95)
+            QMessageBox.information(self, "Saved", f"Saved image to:\n{path}")
 
     # ── Save current character ────────────────────────────────────────────────
 

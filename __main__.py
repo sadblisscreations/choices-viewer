@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from .assets import discover_custom_items, discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes, find_characters
 from .config import load_config, resource_path, save_config
 from .assets import validate_dlc_path
-from .style import BASE_STYLE
+from .ui.style import BASE_STYLE
 from .ui.dialogs import FolderPickerDialog
 from .ui.main_window import MainWindow
 

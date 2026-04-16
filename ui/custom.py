@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from ..compositing import CUSTOM_LAYER_ORDER, CUSTOM_OPTIONAL, SLOT_LABELS, EMOTIONS
 from ..psd import extract_custom_layers, write_layered_psd
 from ..workers import CustomLoadWorker, SaveCustomEmotionsWorker
-from ..style import EMOTION_COLORS, TEXT
+from .style import EMOTION_COLORS, TEXT
 from . import separator
 
 

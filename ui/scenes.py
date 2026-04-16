@@ -9,8 +9,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
-from ..ccbi import CANVAS_W, CANVAS_H, setup_scene, render_scene_to_image, TextureCache
-from ..style import TEXT
+from ..parsers.ccbi_parser import CANVAS_W, CANVAS_H, setup_scene, render_scene_to_image, TextureCache
+from .style import TEXT
 from . import separator
 
 CANVAS_BG = QColor(15, 15, 26)

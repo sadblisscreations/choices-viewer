@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 
 from ..assets import find_characters, discover_custom_items, discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes
 from ..config import load_config, save_config
-from ..style import BASE_STYLE
+from .style import BASE_STYLE
 from .dialogs import FolderPickerDialog
 from .characters import CharactersTab
 from .custom import CustomBuilderTab

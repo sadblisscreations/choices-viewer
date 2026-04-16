@@ -4,7 +4,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QTransform
 
-from .plist_parser import parse_plist
+from .parsers.plist_parser import parse_plist
 
 # ── Character layer constants ─────────────────────────────────────────────────
 

@@ -10,11 +10,11 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QSlider, QSplitter, QVBoxLayout, QWidget,
 )
 
-from ..plist_parser import parse_plist
+from ..parsers.plist_parser import parse_plist
 from ..compositing import analyze_spritesheet, composite_sheet_frame
 from ..psd import _qimage_to_rgba, extract_sheet_frame_layers, write_layered_psd
 from ..workers import GifSaveWorker, SheetPsdSaveWorker
-from ..style import TEXT
+from .style import TEXT
 from .custom import PreviewLabel
 from . import separator
 
