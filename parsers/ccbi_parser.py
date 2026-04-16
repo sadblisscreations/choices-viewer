@@ -633,7 +633,7 @@ def setup_scene(ccbi_path: Path, bg_dir: Path, tex_dir: Path) -> dict:
         pct_x = c.get("_abs_x", 50)
         pct_y = c.get("_abs_y", 50)
         if is_wide:
-            sx = (pct_x / 100.0) * full_w
+            sx = ox + (pct_x / 100.0) * full_w
             sy = (1.0 - pct_y / 100.0) * full_h
         else:
             sx = ox + (pct_x / 100.0) * full_w
