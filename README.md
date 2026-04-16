@@ -58,5 +58,5 @@ The executable will be in the `dist/` folder.
 ## Contributors
 
 - [sadblisscreations](https://github.com/sadblisscreations)
-- [Claude](https://claude.ai) (Books tab / branching story graph, parser improvements, UI polish)
+- [Claude](https://claude.ai)
 - [Kimi](https://github.com/moonshot-ai) (Books tab / branching story graph, parser improvements, UI polish)
