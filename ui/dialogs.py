@@ -8,15 +8,15 @@ from PyQt6.QtWidgets import (
 )
 
 from ..assets import validate_dlc_path, portrait_dirs
-from ..style import ACCENT, GREEN, SUBTLE, TEXT, BASE_STYLE
+from ..style import BASE_STYLE, TEXT
 
 
 class FolderPickerDialog(QDialog):
     def __init__(self, initial_path: str = ""):
         super().__init__()
-        self.setWindowTitle("sadblisscreations: Choices Tool — Setup")
+        self.setWindowTitle("Choices Tool — Setup")
         self.setStyleSheet(BASE_STYLE)
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(480)
         self.resize(560, 0)
         self.setWindowFlags(
             (self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
@@ -25,13 +25,13 @@ class FolderPickerDialog(QDialog):
         self._assets_path = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 28)
-        layout.setSpacing(0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
-        title = QLabel("sadblisscreations: Choices Tool")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #cdd6f4;")
+        title = QLabel("Choices Tool")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: " + TEXT + ";")
         subtitle = QLabel("Composite portrait viewer — every character, every emotion")
-        subtitle.setStyleSheet(f"font-size: 12px; color: {SUBTLE}; margin-bottom: 28px;")
+        subtitle.setStyleSheet("font-size: 11px; color: " + TEXT + "; margin-bottom: 8px;")
         layout.addWidget(title)
         layout.addWidget(subtitle)
 
@@ -41,21 +41,18 @@ class FolderPickerDialog(QDialog):
             "an <code>assets</code> subfolder with <code>portraits</code> inside."
         )
         instr.setWordWrap(True)
-        instr.setStyleSheet(
-            f"color: {TEXT}; font-size: 12px; line-height: 1.6;"
-            f" background: #313244; border-radius: 6px; padding: 14px 16px; margin-bottom: 10px;"
-        )
+        instr.setStyleSheet("color: " + TEXT + "; font-size: 11px;")
         layout.addWidget(instr)
 
-        help_btn = QPushButton("Not sure where to find the DLC cache folder?  Click here for a guide.")
+        help_btn = QPushButton("Not sure where to find the DLC cache folder? Click here for a guide.")
         help_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        help_btn.setStyleSheet(f"""
-            QPushButton {{
+        help_btn.setStyleSheet("""
+            QPushButton {
                 background: transparent; border: none;
-                color: {ACCENT}; font-size: 11px;
-                padding: 0 0 16px 0; text-align: left;
-            }}
-            QPushButton:hover {{ color: #b9d1fb; text-decoration: underline; }}
+                color: #4fc1ff; font-size: 11px;
+                padding: 0 0 6px 0; text-align: left;
+            }
+            QPushButton:hover { color: #ffffff; text-decoration: underline; }
         """)
         help_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
             "https://www.reddit.com/r/Choices/comments/bd1fa9/comment/ekvg388/"
@@ -64,24 +61,24 @@ class FolderPickerDialog(QDialog):
         layout.addWidget(help_btn)
 
         path_row = QHBoxLayout()
-        path_row.setSpacing(8)
+        path_row.setSpacing(6)
         self.path_edit = QLineEdit(initial_path)
         self.path_edit.setPlaceholderText("Path to your DLC cache folder…")
         self.path_edit.textChanged.connect(self._on_path_changed)
         browse_btn = QPushButton("Browse…")
-        browse_btn.setFixedWidth(90)
+        browse_btn.setFixedWidth(80)
         browse_btn.clicked.connect(self._browse)
         path_row.addWidget(self.path_edit)
         path_row.addWidget(browse_btn)
         layout.addLayout(path_row)
 
         self.status_lbl = QLabel("")
-        self.status_lbl.setStyleSheet(f"font-size: 11px; margin-top: 6px; margin-bottom: 20px;")
-        self.status_lbl.setMinimumHeight(20)
+        self.status_lbl.setStyleSheet("font-size: 11px; margin-top: 2px; margin-bottom: 8px; color: " + TEXT + ";")
+        self.status_lbl.setMinimumHeight(18)
         layout.addWidget(self.status_lbl)
 
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
+        btn_row.setSpacing(8)
         btn_row.addStretch()
         quit_btn = QPushButton("Quit")
         quit_btn.clicked.connect(self.reject)
@@ -120,9 +117,9 @@ class FolderPickerDialog(QDialog):
             self._assets_path = assets
 
     def _set_status(self, text: str, valid):
-        colour = GREEN if valid is True else ("#f38ba8" if valid is False else SUBTLE)
+        colour = "#89d185" if valid is True else ("#f44747" if valid is False else TEXT)
         self.status_lbl.setStyleSheet(
-            f"font-size: 11px; margin-top: 6px; margin-bottom: 20px; color: {colour};"
+            "font-size: 11px; margin-top: 2px; margin-bottom: 8px; color: " + colour + ";"
         )
         self.status_lbl.setText(text)
 

@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 from ..plist_parser import parse_plist
 from ..psd import extract_sprite_layers, write_layered_psd
 from ..workers import LoadWorker, SaveAllWorker
-from ..style import ACCENT, EMOTION_COLORS, SUBTLE, TEXT
+from ..style import EMOTION_COLORS, TEXT
 from . import separator
 
 
@@ -21,26 +21,34 @@ class EmotionCard(QWidget):
     def __init__(self, emotion: str, pixmap, parent=None):
         super().__init__(parent)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(6, 6, 6, 10)
-        lay.setSpacing(8)
+        lay.setContentsMargins(6, 6, 6, 6)
+        lay.setSpacing(4)
         lay.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        self.setStyleSheet(
+            "background: #1e1e1e; "
+            "border-top: 2px solid #0a0a0a; "
+            "border-left: 2px solid #0a0a0a; "
+            "border-right: 2px solid #5c5c5c; "
+            "border-bottom: 2px solid #5c5c5c;"
+        )
 
         img = QLabel()
         img.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+        img.setStyleSheet("border: none; background: #1e1e1e;")
         if pixmap and not pixmap.isNull():
             img.setPixmap(pixmap.scaledToWidth(self.CARD_WIDTH, Qt.TransformationMode.SmoothTransformation))
         else:
             img.setText("—")
-            img.setStyleSheet(f"color: {SUBTLE}; font-size: 24px;")
+            img.setStyleSheet("color: #808080; font-size: 18px; border: none; background: #1e1e1e;")
             img.setFixedSize(self.CARD_WIDTH, self.CARD_WIDTH)
 
-        colour = EMOTION_COLORS.get(emotion, ACCENT)
+        colour = EMOTION_COLORS.get(emotion, "#4fc1ff")
         badge = QLabel(emotion)
         badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         badge.setStyleSheet(
-            f"color: {colour}; font-size: 10px; font-weight: bold;"
-            f" letter-spacing: 1.5px; padding: 3px 6px;"
-            f" border: 1px solid {colour}; border-radius: 3px;"
+            f"color: {colour}; font-size: 11px; font-weight: bold;"
+            f" letter-spacing: 1px; padding: 2px 4px;"
+            f" border: 1px solid {colour}; background: #1e1e1e;"
         )
         badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         lay.addWidget(img)
@@ -54,8 +62,8 @@ class CharacterPanel(QScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._root = QWidget()
         self._vbox = QVBoxLayout(self._root)
-        self._vbox.setContentsMargins(20, 20, 20, 20)
-        self._vbox.setSpacing(16)
+        self._vbox.setContentsMargins(12, 12, 12, 12)
+        self._vbox.setSpacing(10)
         self._vbox.addStretch()
         self.setWidget(self._root)
         self._show_placeholder()
@@ -64,7 +72,7 @@ class CharacterPanel(QScrollArea):
         self._clear()
         self._insert_title(name)
         lbl = QLabel("Loading…")
-        lbl.setStyleSheet(f"color: {SUBTLE}; font-size: 13px; padding: 20px;")
+        lbl.setStyleSheet("color: #808080; font-size: 12px; padding: 12px; background: transparent;")
         self._vbox.insertWidget(1, lbl)
 
     def show_emotions(self, name: str, results: list):
@@ -73,14 +81,14 @@ class CharacterPanel(QScrollArea):
         row_w = QWidget()
         row = QHBoxLayout(row_w)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(16)
+        row.setSpacing(10)
         row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         if results:
             for emotion, pix in results:
                 row.addWidget(EmotionCard(emotion, pix))
         else:
             lbl = QLabel("No renderable layers found for this character.")
-            lbl.setStyleSheet(f"color: {SUBTLE}; font-size: 13px; padding: 20px;")
+            lbl.setStyleSheet("color: #808080; font-size: 12px; padding: 12px; background: transparent;")
             row.addWidget(lbl)
         row.addStretch()
         self._vbox.insertWidget(1, row_w)
@@ -88,13 +96,13 @@ class CharacterPanel(QScrollArea):
     def _show_placeholder(self):
         lbl = QLabel("← Select a character to view")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(f"color: {SUBTLE}; font-size: 14px;")
+        lbl.setStyleSheet("color: #808080; font-size: 13px; background: transparent;")
         lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._vbox.insertWidget(0, lbl)
 
     def _insert_title(self, name: str):
         title = QLabel(name)
-        title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {TEXT}; padding-bottom: 4px;")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: " + TEXT + "; padding-bottom: 2px; background: transparent;")
         self._vbox.insertWidget(0, separator())
         self._vbox.insertWidget(0, title)
 
@@ -132,15 +140,15 @@ class CharactersTab(QWidget):
         sidebar.setMinimumWidth(220)
         sidebar.setMaximumWidth(400)
         sb = QVBoxLayout(sidebar)
-        sb.setContentsMargins(10, 10, 10, 10)
-        sb.setSpacing(8)
+        sb.setContentsMargins(8, 8, 8, 8)
+        sb.setSpacing(6)
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search characters…")
         self._search.textChanged.connect(self._on_search)
 
         self._count_lbl = QLabel()
-        self._count_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE}; padding: 0 4px;")
+        self._count_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; padding: 0 2px; background: transparent;")
 
         self._list_w = QListWidget()
         self._list_w.setUniformItemSizes(True)
@@ -157,7 +165,7 @@ class CharactersTab(QWidget):
 
         fmt_row = QHBoxLayout()
         fmt_lbl = QLabel("Format:")
-        fmt_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        fmt_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
         self._fmt_combo = QComboBox()
         self._fmt_combo.addItems(["PNG", "JPEG", "PSD"])
         self._fmt_combo.setFixedWidth(80)
@@ -176,7 +184,7 @@ class CharactersTab(QWidget):
         sb.addWidget(self._save_all_btn)
 
         self._save_progress_lbl = QLabel("")
-        self._save_progress_lbl.setStyleSheet(f"font-size: 10px; color: {SUBTLE};")
+        self._save_progress_lbl.setStyleSheet("font-size: 10px; color: " + TEXT + "; background: transparent;")
         self._save_progress_lbl.setWordWrap(True)
         sb.addWidget(self._save_progress_lbl)
 
@@ -186,7 +194,7 @@ class CharactersTab(QWidget):
         splitter.addWidget(self._panel)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([280, 900])
+        splitter.setSizes([260, 900])
         layout.addWidget(splitter)
 
     def refresh(self, assets: Path, characters: list):

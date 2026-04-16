@@ -1,12 +1,12 @@
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QPixmap
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton,
+    QHBoxLayout, QLabel, QPushButton,
     QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from ..config import resource_path
-from ..style import ACCENT, BORDER, PANEL_BG, SUBTLE, TEXT
+from ..style import BG, TEXT
 
 
 class AboutTab(QWidget):
@@ -15,18 +15,24 @@ class AboutTab(QWidget):
 
         outer = QVBoxLayout(self)
         outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        outer.setContentsMargins(40, 40, 40, 40)
+        outer.setContentsMargins(20, 20, 20, 20)
         outer.setSpacing(0)
 
-        card = QWidget()
-        card.setMaximumWidth(520)
-        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        card.setStyleSheet(
-            f"background: {PANEL_BG}; border: 1px solid {BORDER}; border-radius: 12px;"
+        # Classic raised About box using QWidget + explicit border
+        box = QWidget()
+        box.setMaximumWidth(520)
+        box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        box.setStyleSheet(
+            "background: " + BG + "; "
+            "border-top: 2px solid #5c5c5c; "
+            "border-left: 2px solid #5c5c5c; "
+            "border-right: 2px solid #0a0a0a; "
+            "border-bottom: 2px solid #0a0a0a;"
         )
-        vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(40, 36, 40, 36)
-        vbox.setSpacing(0)
+
+        vbox = QVBoxLayout(box)
+        vbox.setContentsMargins(16, 16, 16, 16)
+        vbox.setSpacing(8)
         vbox.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         # Icon
@@ -37,103 +43,80 @@ class AboutTab(QWidget):
             pix = QPixmap(str(icon_path))
             if not pix.isNull():
                 pix = pix.scaled(
-                    96, 96,
+                    64, 64,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
             icon_lbl.setPixmap(pix)
             icon_lbl.setStyleSheet("border: none; background: transparent;")
             vbox.addWidget(icon_lbl, alignment=Qt.AlignmentFlag.AlignHCenter)
-            vbox.addSpacing(20)
 
         # App name
-        name_lbl = QLabel("sadblisscreations: Choices Tool")
+        name_lbl = QLabel("Choices Tool")
         name_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         name_lbl.setStyleSheet(
-            f"font-size: 22px; font-weight: bold; color: {TEXT};"
-            f" border: none; background: transparent;"
+            "font-size: 14px; font-weight: bold; color: " + TEXT + "; border: none; background: transparent;"
         )
         vbox.addWidget(name_lbl)
-        vbox.addSpacing(6)
 
-        sep1 = QFrame()
-        sep1.setFrameShape(QFrame.Shape.HLine)
-        sep1.setStyleSheet(f"color: {BORDER}; border: none; background: {BORDER}; max-height: 1px;")
-        vbox.addWidget(sep1)
-        vbox.addSpacing(20)
+        # Sunken separator
+        from . import separator
+        vbox.addWidget(separator())
 
         # Creator line
-        by_lbl = QLabel("Created by")
+        by_lbl = QLabel("Created by sadblisscreations")
         by_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        by_lbl.setStyleSheet(f"font-size: 12px; color: {SUBTLE}; border: none; background: transparent;")
+        by_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; border: none; background: transparent;")
         vbox.addWidget(by_lbl)
-        vbox.addSpacing(4)
 
-        ig_btn = QPushButton("sadblisscreations")
+        ig_btn = QPushButton("instagram.com/sadblisscreations")
         ig_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        ig_btn.setStyleSheet(f"""
-            QPushButton {{
+        ig_btn.setStyleSheet("""
+            QPushButton {
                 background: transparent; border: none;
-                color: {ACCENT}; font-size: 15px; font-weight: bold;
+                color: #4fc1ff; font-size: 11px;
                 padding: 0;
-            }}
-            QPushButton:hover {{ color: #b9d1fb; text-decoration: underline; }}
+            }
+            QPushButton:hover { color: #ffffff; text-decoration: underline; }
         """)
         ig_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://www.instagram.com/sadblisscreations/"))
         )
         vbox.addWidget(ig_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
-        vbox.addSpacing(4)
 
-        ig_hint = QLabel("instagram.com/sadblisscreations")
-        ig_hint.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        ig_hint.setStyleSheet(f"font-size: 11px; color: {SUBTLE}; border: none; background: transparent;")
-        vbox.addWidget(ig_hint)
-        vbox.addSpacing(24)
+        # Sunken separator
+        vbox.addWidget(separator())
 
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: {BORDER}; border: none; background: {BORDER}; max-height: 1px;")
-        vbox.addWidget(sep2)
-        vbox.addSpacing(20)
-
-        # Written by line
-        written_lbl = QLabel("Written by sadblisscreations and")
+        written_lbl = QLabel("Written by sadblisscreations and Claude")
         written_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        written_lbl.setStyleSheet(f"font-size: 12px; color: {SUBTLE}; border: none; background: transparent;")
+        written_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; border: none; background: transparent;")
         vbox.addWidget(written_lbl)
-        vbox.addSpacing(4)
 
-        claude_btn = QPushButton("Claude (claude.ai)")
+        claude_btn = QPushButton("claude.ai")
         claude_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        claude_btn.setStyleSheet(f"""
-            QPushButton {{
+        claude_btn.setStyleSheet("""
+            QPushButton {
                 background: transparent; border: none;
-                color: {ACCENT}; font-size: 13px;
+                color: #4fc1ff; font-size: 11px;
                 padding: 0;
-            }}
-            QPushButton:hover {{ color: #b9d1fb; text-decoration: underline; }}
+            }
+            QPushButton:hover { color: #ffffff; text-decoration: underline; }
         """)
         claude_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://claude.ai/"))
         )
         vbox.addWidget(claude_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
-        vbox.addSpacing(24)
 
-        sep3 = QFrame()
-        sep3.setFrameShape(QFrame.Shape.HLine)
-        sep3.setStyleSheet(f"color: {BORDER}; border: none; background: {BORDER}; max-height: 1px;")
-        vbox.addWidget(sep3)
-        vbox.addSpacing(16)
+        # Sunken separator
+        vbox.addWidget(separator())
 
         # Effects note
         note_hdr = QLabel("Note on the Effects Tab")
         note_hdr.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         note_hdr.setStyleSheet(
-            f"font-size: 12px; font-weight: bold; color: {TEXT}; border: none; background: transparent;"
+            "font-size: 11px; font-weight: bold; color: " + TEXT + "; border: none; background: transparent;"
         )
         vbox.addWidget(note_hdr)
-        vbox.addSpacing(6)
 
         note_lbl = QLabel(
             "The Effects tab is a hit or miss — some spritesheets will render\n"
@@ -142,7 +125,7 @@ class AboutTab(QWidget):
         )
         note_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         note_lbl.setWordWrap(True)
-        note_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE}; border: none; background: transparent;")
+        note_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; border: none; background: transparent;")
         vbox.addWidget(note_lbl)
 
-        outer.addWidget(card, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        outer.addWidget(box, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)

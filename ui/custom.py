@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from ..compositing import CUSTOM_LAYER_ORDER, CUSTOM_OPTIONAL, SLOT_LABELS, EMOTIONS
 from ..psd import extract_custom_layers, write_layered_psd
 from ..workers import CustomLoadWorker, SaveCustomEmotionsWorker
-from ..style import ACCENT, BORDER, EMOTION_COLORS, PANEL_BG, SUBTLE, TEXT
+from ..style import EMOTION_COLORS, TEXT
 from . import separator
 
 
@@ -22,6 +22,13 @@ class PreviewLabel(QLabel):
         self._source = None
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setMinimumSize(200, 200)
+        self.setStyleSheet(
+            "background: #1e1e1e; "
+            "border-top: 2px solid #0a0a0a; "
+            "border-left: 2px solid #0a0a0a; "
+            "border-right: 2px solid #5c5c5c; "
+            "border-bottom: 2px solid #5c5c5c;"
+        )
 
     def setSourcePixmap(self, pix):
         self._source = pix
@@ -77,16 +84,16 @@ class CustomBuilderTab(QWidget):
         left.setMinimumWidth(240)
         left.setMaximumWidth(420)
         left_vbox = QVBoxLayout(left)
-        left_vbox.setContentsMargins(10, 10, 10, 10)
-        left_vbox.setSpacing(8)
+        left_vbox.setContentsMargins(8, 8, 8, 8)
+        left_vbox.setSpacing(6)
 
         type_hdr = QLabel("CHARACTER TYPE")
-        type_hdr.setStyleSheet(f"font-size: 10px; font-weight: bold; color: {SUBTLE}; letter-spacing: 1.5px;")
+        type_hdr.setStyleSheet("font-size: 10px; font-weight: bold; color: " + TEXT + "; letter-spacing: 1px;")
         left_vbox.addWidget(type_hdr)
 
         self._type_list = QListWidget()
         self._type_list.setMinimumHeight(80)
-        self._type_list.setMaximumHeight(180)
+        self._type_list.setMaximumHeight(160)
         self._type_list.setUniformItemSizes(True)
         for ct in sorted(self._items.keys()):
             item = QListWidgetItem(self._fmt_type(ct))
@@ -98,7 +105,7 @@ class CustomBuilderTab(QWidget):
         left_vbox.addWidget(separator())
 
         layers_hdr = QLabel("LAYERS")
-        layers_hdr.setStyleSheet(f"font-size: 10px; font-weight: bold; color: {SUBTLE}; letter-spacing: 1.5px;")
+        layers_hdr.setStyleSheet("font-size: 10px; font-weight: bold; color: " + TEXT + "; letter-spacing: 1px;")
         left_vbox.addWidget(layers_hdr)
 
         # Scrollable slot area
@@ -108,8 +115,8 @@ class CustomBuilderTab(QWidget):
 
         slot_widget = QWidget()
         slot_vbox = QVBoxLayout(slot_widget)
-        slot_vbox.setContentsMargins(0, 4, 4, 4)
-        slot_vbox.setSpacing(10)
+        slot_vbox.setContentsMargins(0, 2, 2, 2)
+        slot_vbox.setSpacing(8)
 
         ui_order = ["body", "face", "hair_b", "hair_f", "clothing", "hat_f", "prop_f", "prop_b", "acc", "tattoo"]
         for slot in ui_order:
@@ -119,21 +126,22 @@ class CustomBuilderTab(QWidget):
             row = QWidget()
             rv = QVBoxLayout(row)
             rv.setContentsMargins(0, 0, 0, 0)
-            rv.setSpacing(3)
+            rv.setSpacing(2)
 
             hdr_row = QHBoxLayout()
-            hdr_row.setSpacing(6)
+            hdr_row.setSpacing(4)
             slot_lbl = QLabel(lbl_text)
             slot_lbl.setStyleSheet(
-                f"font-size: 11px; color: {'#9399b2' if not optional else SUBTLE};"
+                f"font-size: 11px; color: {TEXT};"
                 f" font-weight: {'bold' if not optional else 'normal'};"
+                f" background: transparent;"
             )
             hdr_row.addWidget(slot_lbl)
             if optional:
                 opt_tag = QLabel("optional")
                 opt_tag.setStyleSheet(
-                    f"font-size: 9px; color: {SUBTLE}; border: 1px solid {BORDER};"
-                    f" border-radius: 2px; padding: 0 4px;"
+                    "font-size: 9px; color: " + TEXT + "; border: 1px solid #5c5c5c;"
+                    " border-radius: 0px; padding: 0 3px; background: #2b2b2b;"
                 )
                 hdr_row.addWidget(opt_tag)
             hdr_row.addStretch()
@@ -148,28 +156,44 @@ class CustomBuilderTab(QWidget):
             # Emotion picker row (face slot only)
             if slot == "face":
                 emo_row = QHBoxLayout()
-                emo_row.setSpacing(3)
+                emo_row.setSpacing(2)
                 emo_row.setContentsMargins(0, 2, 0, 0)
                 btn_grp = QButtonGroup(self)
                 btn_grp.setExclusive(True)
                 for emo in EMOTIONS:
-                    ec = EMOTION_COLORS.get(emo, ACCENT)
+                    ec = EMOTION_COLORS.get(emo, "#4fc1ff")
                     btn = QPushButton(emo.capitalize())
                     btn.setCheckable(True)
                     btn.setChecked(emo == "NEUTRAL")
                     btn.setFixedHeight(22)
                     btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                    # Classic dark Win98 toggle look with emotion-coloured text when checked
                     btn.setStyleSheet(f"""
                         QPushButton {{
-                            background: {PANEL_BG}; border: 1px solid {BORDER};
-                            border-radius: 3px; font-size: 10px;
-                            padding: 0 2px; color: {SUBTLE};
+                            background: #2b2b2b;
+                            color: #e0e0e0;
+                            border-top: 2px solid #5c5c5c;
+                            border-left: 2px solid #5c5c5c;
+                            border-right: 2px solid #0a0a0a;
+                            border-bottom: 2px solid #0a0a0a;
+                            border-radius: 0px;
+                            font-size: 10px;
+                            padding: 0 2px;
                         }}
                         QPushButton:checked {{
-                            background: {ec}22; border-color: {ec};
-                            color: {ec}; font-weight: bold;
+                            background: #2b2b2b;
+                            border-top: 2px solid #0a0a0a;
+                            border-left: 2px solid #0a0a0a;
+                            border-right: 2px solid #5c5c5c;
+                            border-bottom: 2px solid #5c5c5c;
+                            color: {ec};
+                            font-weight: bold;
                         }}
-                        QPushButton:hover {{ color: {TEXT}; border-color: #585b70; }}
+                        QPushButton:hover {{
+                            color: #ffffff;
+                            border-top: 2px solid #6c6c6c;
+                            border-left: 2px solid #6c6c6c;
+                        }}
                     """)
                     btn.clicked.connect(lambda _checked, e=emo: self._set_emotion(e))
                     btn_grp.addButton(btn)
@@ -186,31 +210,28 @@ class CustomBuilderTab(QWidget):
         # ── Right preview ─────────────────────────────────────────────────────
         right = QWidget()
         rv2 = QVBoxLayout(right)
-        rv2.setContentsMargins(20, 16, 20, 16)
-        rv2.setSpacing(10)
+        rv2.setContentsMargins(12, 12, 12, 12)
+        rv2.setSpacing(8)
 
         preview_hdr = QLabel("Custom Character")
-        preview_hdr.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {TEXT};")
+        preview_hdr.setStyleSheet("font-size: 13px; font-weight: bold; color: " + TEXT + "; background: transparent;")
         rv2.addWidget(preview_hdr)
 
         self._preview = PreviewLabel()
         self._preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._preview.setStyleSheet(
-            f"background: {PANEL_BG}; border: 1px solid {BORDER}; border-radius: 6px;"
-        )
         rv2.addWidget(self._preview, stretch=1)
 
         self._status_lbl = QLabel("Select a character type to begin")
         self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._status_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        self._status_lbl.setStyleSheet("font-size: 11px; color: #808080; background: transparent;")
         rv2.addWidget(self._status_lbl)
 
         # ── Save bar ──────────────────────────────────────────────────────────
         save_bar = QHBoxLayout()
-        save_bar.setSpacing(8)
+        save_bar.setSpacing(6)
 
         custom_fmt_lbl = QLabel("Format:")
-        custom_fmt_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        custom_fmt_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
         self._custom_fmt_combo = QComboBox()
         self._custom_fmt_combo.addItems(["PNG", "JPEG", "PSD"])
         self._custom_fmt_combo.setFixedWidth(80)

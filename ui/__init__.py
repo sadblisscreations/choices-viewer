@@ -1,11 +1,13 @@
 from PyQt6.QtWidgets import QFrame
 
-from ..style import BORDER
-
 
 def separator() -> QFrame:
-    """Return a styled horizontal separator line."""
+    """Return a classic Windows 98 horizontal etched separator line."""
     f = QFrame()
     f.setFrameShape(QFrame.Shape.HLine)
-    f.setStyleSheet(f"color: {BORDER};")
+    f.setStyleSheet(
+        "border-top: 1px solid #0a0a0a; "
+        "border-bottom: 1px solid #5c5c5c; "
+        "background: transparent;"
+    )
     return f

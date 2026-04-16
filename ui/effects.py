@@ -14,7 +14,7 @@ from ..plist_parser import parse_plist
 from ..compositing import analyze_spritesheet, composite_sheet_frame
 from ..psd import _qimage_to_rgba, extract_sheet_frame_layers, write_layered_psd
 from ..workers import GifSaveWorker, SheetPsdSaveWorker
-from ..style import BORDER, PANEL_BG, SUBTLE, TEXT
+from ..style import TEXT
 from .custom import PreviewLabel
 from . import separator
 
@@ -57,11 +57,11 @@ class EffectsTab(QWidget):
         left.setMinimumWidth(180)
         left.setMaximumWidth(340)
         lv = QVBoxLayout(left)
-        lv.setContentsMargins(10, 10, 10, 10)
-        lv.setSpacing(8)
+        lv.setContentsMargins(8, 8, 8, 8)
+        lv.setSpacing(6)
 
         hdr = QLabel("SPRITESHEETS")
-        hdr.setStyleSheet(f"font-size: 10px; font-weight: bold; color: {SUBTLE}; letter-spacing: 1.5px;")
+        hdr.setStyleSheet("font-size: 10px; font-weight: bold; color: " + TEXT + "; letter-spacing: 1px;")
         lv.addWidget(hdr)
 
         self._search = QLineEdit()
@@ -79,46 +79,43 @@ class EffectsTab(QWidget):
         lv.addWidget(self._list, stretch=1)
 
         self._count_lbl = QLabel(f"{len(self._sheets)} effects")
-        self._count_lbl.setStyleSheet(f"font-size: 10px; color: {SUBTLE};")
+        self._count_lbl.setStyleSheet("font-size: 10px; color: " + TEXT + "; background: transparent;")
         lv.addWidget(self._count_lbl)
 
         # ── Right panel ───────────────────────────────────────────────────────
         right = QWidget()
         rv = QVBoxLayout(right)
-        rv.setContentsMargins(20, 16, 20, 16)
-        rv.setSpacing(10)
+        rv.setContentsMargins(12, 12, 12, 12)
+        rv.setSpacing(8)
 
         self._title_lbl = QLabel("Effects Viewer")
-        self._title_lbl.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {TEXT};")
+        self._title_lbl.setStyleSheet("font-size: 13px; font-weight: bold; color: " + TEXT + "; background: transparent;")
         rv.addWidget(self._title_lbl)
 
         self._preview = PreviewLabel()
         self._preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._preview.setStyleSheet(
-            f"background: {PANEL_BG}; border: 1px solid {BORDER}; border-radius: 6px;"
-        )
         rv.addWidget(self._preview, stretch=1)
 
         self._info_lbl = QLabel("Select an effect")
         self._info_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._info_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        self._info_lbl.setStyleSheet("font-size: 11px; color: #808080; background: transparent;")
         rv.addWidget(self._info_lbl)
 
         # Playback controls
         ctrl_row = QHBoxLayout()
-        ctrl_row.setSpacing(6)
+        ctrl_row.setSpacing(4)
 
-        self._first_btn = QPushButton("|◀")
-        self._prev_btn  = QPushButton("◀")
-        self._play_btn  = QPushButton("▶  Play")
-        self._next_btn  = QPushButton("▶")
-        self._last_btn  = QPushButton("▶|")
+        self._first_btn = QPushButton("|<")
+        self._prev_btn  = QPushButton("<")
+        self._play_btn  = QPushButton("Play")
+        self._next_btn  = QPushButton(">")
+        self._last_btn  = QPushButton(">|")
         for btn in (self._first_btn, self._prev_btn, self._play_btn,
                     self._next_btn, self._last_btn):
-            btn.setFixedHeight(30)
+            btn.setFixedHeight(26)
             btn.setEnabled(False)
         self._play_btn.setObjectName("primary")
-        self._play_btn.setFixedWidth(90)
+        self._play_btn.setFixedWidth(70)
 
         self._first_btn.clicked.connect(self._go_first)
         self._prev_btn.clicked.connect(self._go_prev)
@@ -127,7 +124,7 @@ class EffectsTab(QWidget):
         self._last_btn.clicked.connect(self._go_last)
 
         fps_lbl = QLabel("FPS:")
-        fps_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        fps_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
         self._fps_combo = QComboBox()
         self._fps_combo.addItems(["6", "8", "10", "12", "15", "18", "24"])
         self._fps_combo.setCurrentIndex(3)   # 12 fps default
@@ -146,16 +143,16 @@ class EffectsTab(QWidget):
 
         # Frame slider
         slider_row = QHBoxLayout()
-        slider_row.setSpacing(8)
+        slider_row.setSpacing(6)
         frame_lbl = QLabel("Frame:")
-        frame_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        frame_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
         self._frame_slider = QSlider(Qt.Orientation.Horizontal)
         self._frame_slider.setMinimum(0)
         self._frame_slider.setMaximum(0)
         self._frame_slider.setEnabled(False)
         self._frame_slider.valueChanged.connect(self._on_slider_changed)
         self._frame_num_lbl = QLabel("0 / 0")
-        self._frame_num_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        self._frame_num_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
         self._frame_num_lbl.setFixedWidth(60)
         slider_row.addWidget(frame_lbl)
         slider_row.addWidget(self._frame_slider, stretch=1)
@@ -166,9 +163,9 @@ class EffectsTab(QWidget):
 
         # Save bar
         save_row = QHBoxLayout()
-        save_row.setSpacing(8)
+        save_row.setSpacing(6)
         fmt_lbl = QLabel("Format:")
-        fmt_lbl.setStyleSheet(f"font-size: 11px; color: {SUBTLE};")
+        fmt_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; background: transparent;")
         self._fmt_combo = QComboBox()
         self._fmt_combo.addItems(["GIF", "PNG", "PSD"])
         self._fmt_combo.setFixedWidth(80)
@@ -273,12 +270,12 @@ class EffectsTab(QWidget):
         if self._frame_count <= 1:
             return
         self._playing = True
-        self._play_btn.setText("⏸  Pause")
+        self._play_btn.setText("Pause")
         self._anim_timer.start(max(20, round(1000 / self._fps())))
 
     def _stop_playback(self):
         self._playing = False
-        self._play_btn.setText("▶  Play")
+        self._play_btn.setText("Play")
         self._anim_timer.stop()
 
     def _next_frame(self):
