@@ -179,18 +179,6 @@ class ScenesTab(QWidget):
         ctrl_row.addStretch()
         rv.addLayout(ctrl_row)
 
-        rv.addWidget(separator())
-
-        # Save bar
-        save_row = QHBoxLayout()
-        save_row.setSpacing(6)
-        self._save_btn = QPushButton("Save Frame…")
-        self._save_btn.setEnabled(False)
-        self._save_btn.clicked.connect(self._save_frame)
-        save_row.addWidget(self._save_btn)
-        save_row.addStretch()
-        rv.addLayout(save_row)
-
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
@@ -213,12 +201,10 @@ class ScenesTab(QWidget):
         try:
             self._preview.set_scene(ccbi_path, bg_dir, tex_dir)
             self._preview.start_animation()
-            self._save_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.warning(self, "Error Loading Scene", f"Failed to parse CCBI file:\n{ccbi_path.name}\n\n{e}")
             self._preview._scene = None
             self._preview.update()
-            self._save_btn.setEnabled(False)
 
     def _prev_scene(self):
         row = self._list.currentRow()
@@ -244,20 +230,6 @@ class ScenesTab(QWidget):
                 f"Emitters: {total} (active {active})  •  Particles: {parts}  •  Seqs: {seqs}"
             )
 
-    def _save_frame(self):
-        if not self._preview._scene:
-            return
-        safe = self._title_lbl.text().replace(" ", "_").replace("/", "_")
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Frame as PNG",
-            str(Path.home() / f"{safe}.png"),
-            "PNG Image (*.png)",
-        )
-        if not path:
-            return
-        self._preview._canvas.save(path, "PNG")
-        QMessageBox.information(self, "Saved", f"Saved frame to:\n{path}")
-
     def update_assets(self, assets: Path, scenes: list):
         self._assets = assets
         self._scenes = scenes
@@ -272,4 +244,3 @@ class ScenesTab(QWidget):
         else:
             self._preview._scene = None
             self._preview.update()
-            self._save_btn.setEnabled(False)
