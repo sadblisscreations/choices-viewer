@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 
-from .assets import discover_custom_items, discover_portrait_layers, discover_spritesheets, find_characters
+from .assets import discover_custom_items, discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes, find_characters
 from .config import load_config, resource_path, save_config
 from .assets import validate_dlc_path
 from .style import BASE_STYLE
@@ -49,8 +49,9 @@ def main():
     characters   = find_characters(assets)
     custom_items = {**discover_custom_items(assets), **discover_portrait_layers(assets)}
     sheets       = discover_spritesheets(assets)
+    ccbi_scenes  = discover_ccbi_scenes(assets)
 
-    if not characters and not custom_items and not sheets:
+    if not characters and not custom_items and not sheets and not ccbi_scenes:
         QMessageBox.critical(
             None, "No Content Found",
             f"No portrait files were found in:\n{assets}\n\n"
@@ -58,7 +59,7 @@ def main():
         )
         sys.exit(1)
 
-    win = MainWindow(assets, characters, custom_items, sheets)
+    win = MainWindow(assets, characters, custom_items, sheets, ccbi_scenes)
     if icon_path.exists():
         win.setWindowIcon(QIcon(str(icon_path)))
     win.showMaximized()

@@ -175,6 +175,25 @@ def discover_portrait_layers(assets: Path) -> dict:
     return result
 
 
+def discover_ccbi_scenes(assets: Path) -> list:
+    """Return [(display_name, ccbi_path)] sorted by display_name."""
+    ccbi_dir = assets / "ccbi"
+    if not ccbi_dir.exists():
+        return []
+    result = []
+    for ccbi in sorted(ccbi_dir.glob("*.ccbi")):
+        try:
+            data = ccbi.read_bytes()[:4]
+            if data != b"ibcc":
+                continue
+            display = re.sub(r"-v\d+$", "", ccbi.stem)
+            display = display.replace("_", " ").strip().title()
+            result.append((display, ccbi))
+        except Exception:
+            continue
+    return result
+
+
 def discover_spritesheets(assets: Path) -> list:
     """Return [(display_name, plist_path, png_path)] sorted by display_name."""
     sheet_dir = assets / "ccbi_spritesheets" / "large"
