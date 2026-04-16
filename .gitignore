@@ -5,3 +5,6 @@ start.bat
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Ignore virtual environment
+venv/
