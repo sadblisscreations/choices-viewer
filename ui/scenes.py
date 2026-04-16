@@ -2,6 +2,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QRect
 from PyQt6.QtGui import QImage, QPainter, QColor
 from PyQt6.QtWidgets import (
     QFileDialog, QHBoxLayout, QLabel, QLineEdit,
@@ -244,9 +245,15 @@ class ScenesTab(QWidget):
         self._title_lbl.setText(current.text())
         bg_dir = self._assets / "backgrounds" / "large"
         tex_dir = self._assets / "ccbi_images" / "2x"
-        self._preview.set_scene(ccbi_path, bg_dir, tex_dir)
-        self._preview.start_animation()
-        self._update_controls()
+        try:
+            self._preview.set_scene(ccbi_path, bg_dir, tex_dir)
+            self._preview.start_animation()
+            self._update_controls()
+        except Exception as e:
+            QMessageBox.warning(self, "Error Loading Scene", f"Failed to parse CCBI file:\n{ccbi_path.name}\n\n{e}")
+            self._preview._scene = None
+            self._preview.update()
+            self._save_btn.setEnabled(False)
 
     def _update_controls(self):
         is_wide = self._preview.is_wide()

@@ -155,7 +155,6 @@ QTabBar::tab:selected {{
     background: {bg};
     border-bottom-color: {bg};
     margin-bottom: -2px;
-    z-index: 1;
 }}
 QTabBar::tab:hover {{
     background: {surface};

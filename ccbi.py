@@ -693,10 +693,10 @@ def render_scene_to_image(canvas: QImage, scene: dict, texcache: TextureCache) -
             surf = texcache.get(em.tex, sz, p.r, p.g, p.b, p.a, em.additive)
             if surf:
                 if em.additive:
-                    painter.setCompositionMode(QPainter.CompositionMode.Plus)
+                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
                 painter.drawImage(px - hsz, py - hsz, surf)
                 if em.additive:
-                    painter.setCompositionMode(QPainter.CompositionMode.SourceOver)
+                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         total += len(em.particles)
 
     painter.setClipping(False)

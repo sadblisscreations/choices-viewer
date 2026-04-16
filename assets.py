@@ -176,7 +176,10 @@ def discover_portrait_layers(assets: Path) -> dict:
 
 
 def discover_ccbi_scenes(assets: Path) -> list:
-    """Return [(display_name, ccbi_path)] sorted by display_name."""
+    """Return [(display_name, ccbi_path)] sorted by display_name.
+    Only includes files that pass a full parse."""
+    from .ccbi import parse_ccbi_file
+
     ccbi_dir = assets / "ccbi"
     if not ccbi_dir.exists():
         return []
@@ -186,6 +189,7 @@ def discover_ccbi_scenes(assets: Path) -> list:
             data = ccbi.read_bytes()[:4]
             if data != b"ibcc":
                 continue
+            parse_ccbi_file(ccbi)
             display = re.sub(r"-v\d+$", "", ccbi.stem)
             display = display.replace("_", " ").strip().title()
             result.append((display, ccbi))
