@@ -1,0 +1,7 @@
+# Ignore user-specific launch script
+start.bat
+
+# Ignore Python cache directories
+__pycache__/
+*.py[cod]
+*$py.class
