@@ -16,13 +16,15 @@
 
 # Choices Viewer
 
-A desktop tool for browsing and exporting assets from the mobile game *Choices: Stories You Play*. Point it at your local DLC cache folder and it will parse the game's spritesheet atlases so you can preview and save characters, custom items, and effects.
+A desktop tool for browsing and exporting assets from the mobile game *Choices: Stories You Play*. Point it at your local DLC cache folder to preview characters, custom items, spritesheets, CCBI scenes, and chapter stories as a branching dialog graph.
 
 ## Features
 
-- **Characters** - browse character portraits with emotion variants
+- **Characters** - browse character portraits with emotion variants and save individual emotions as PNG
 - **Custom** - build and preview custom character outfits by mixing and matching slots (hair, hat, eyes, mouth, body, etc.)
-- **Effects** - view and play back animated spritesheets frame by frame with adjustable FPS
+- **Spritesheets** - view and play back animated spritesheets frame by frame with adjustable FPS
+- **Scenes** - preview CCBI scene files with animated particle effects
+- **Books** - explore chapter stories as an interactive branching dialog graph parsed directly from `.protobin` files
 - Export anything as PNG, GIF, or layered PSD
 
 ## Requirements
