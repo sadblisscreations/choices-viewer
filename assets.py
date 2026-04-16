@@ -198,6 +198,28 @@ def discover_ccbi_scenes(assets: Path) -> list:
     return result
 
 
+def discover_books(books_root: Path) -> list:
+    """
+    Return [(book_name, [(chapter_display, chapter_path)])] sorted.
+    books_root is typically .../dlc_cache/books.
+    """
+    if not books_root.exists():
+        return []
+    result = []
+    for book_dir in sorted(books_root.iterdir()):
+        if not book_dir.is_dir():
+            continue
+        chapters = []
+        for protobin in sorted(book_dir.glob("*.protobin")):
+            display = re.sub(r"-v\d+$", "", protobin.stem)
+            display = display.replace("_", " ").strip().title()
+            chapters.append((display, protobin))
+        if chapters:
+            name = book_dir.name.replace("_", " ").strip().title()
+            result.append((name, chapters))
+    return result
+
+
 def discover_spritesheets(assets: Path) -> list:
     """Return [(display_name, plist_path, png_path)] sorted by display_name."""
     sheet_dir = assets / "ccbi_spritesheets" / "large"
