@@ -111,7 +111,7 @@ class AboutTab(QWidget):
         vbox.addWidget(separator())
 
         # Effects note
-        note_hdr = QLabel("Note on the Effects Tab")
+        note_hdr = QLabel("Note on the Spritesheets Tab")
         note_hdr.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         note_hdr.setStyleSheet(
             "font-size: 11px; font-weight: bold; color: " + TEXT + "; border: none; background: transparent;"
@@ -119,7 +119,7 @@ class AboutTab(QWidget):
         vbox.addWidget(note_hdr)
 
         note_lbl = QLabel(
-            "The Effects tab is a hit or miss — some spritesheets will render\n"
+            "The Spritesheets tab is a hit or miss — some spritesheets will render\n"
             "correctly while others may not display as expected.\n"
             "This is a known limitation."
         )

@@ -88,7 +88,7 @@ class EffectsTab(QWidget):
         rv.setContentsMargins(12, 12, 12, 12)
         rv.setSpacing(8)
 
-        self._title_lbl = QLabel("Effects Viewer")
+        self._title_lbl = QLabel("Spritesheets Viewer")
         self._title_lbl.setStyleSheet("font-size: 13px; font-weight: bold; color: " + TEXT + "; background: transparent;")
         rv.addWidget(self._title_lbl)
 

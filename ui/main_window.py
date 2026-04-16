@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
 
         tabs.addTab(self._chars_tab,   "Characters")
         tabs.addTab(self._custom_tab,  "Custom")
-        tabs.addTab(self._effects_tab, "Effects")
+        tabs.addTab(self._effects_tab, "Spritesheets")
         tabs.addTab(self._scenes_tab,  "Scenes")
         tabs.addTab(self._about_tab,   "About")
 
