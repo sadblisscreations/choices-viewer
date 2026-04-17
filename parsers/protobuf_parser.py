@@ -95,7 +95,7 @@ def decode_protobin(path: Path):
         elif wire == 5:
             pos += 4
         elif wire == 2:
-            length, pos = _decode_varint(field7, pos)
+            length, pos = _read_varint(field7, pos)
             chunk = field7[pos : pos + length]
             pos += length
             f7_fields.setdefault(field, []).append(chunk)
