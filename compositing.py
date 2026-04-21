@@ -49,11 +49,12 @@ def resolve_sprite_key(sprites: dict, slot: str, emotion: str) -> "str | None":
 # ── Custom character layer constants ──────────────────────────────────────────
 
 # Bottom-to-top render order
-CUSTOM_LAYER_ORDER = ["prop_b", "hair_b", "body", "clothing", "tattoo", "face", "hair_f", "hat_f", "prop_f", "acc"]
-CUSTOM_OPTIONAL    = frozenset(["prop_b", "hat_f", "prop_f", "acc", "tattoo"])
+CUSTOM_LAYER_ORDER = ["prop_b", "hat_b", "hair_b", "body", "clothing", "tattoo", "scarf", "face", "hair_f", "hat_f", "prop_f", "acc_b", "acc"]
+CUSTOM_OPTIONAL    = frozenset(["prop_b", "hat_b", "hat_f", "prop_f", "scarf", "acc_b", "acc", "tattoo"])
 
 SLOT_LABELS = {
     "prop_b":   "Prop Back",
+    "hat_b":    "Hat Back",
     "body":     "Body / Skin",
     "face":     "Face",
     "hair_b":   "Hair Back",
@@ -61,9 +62,30 @@ SLOT_LABELS = {
     "clothing": "Clothing",
     "hat_f":    "Hat",
     "prop_f":   "Prop",
+    "scarf":    "Scarf / Strap",
+    "acc_b":    "Accessory Back",
     "acc":      "Accessory",
     "tattoo":   "Tattoo",
 }
+
+
+# ── Atlas loading (with PIL fallback for non-standard PNG formats) ─────────────
+
+def _load_atlas(path: Path) -> QImage:
+    img = QImage(str(path))
+    if not img.isNull():
+        return img
+    try:
+        from PIL import Image as PILImage
+        import numpy as np
+        pil = PILImage.open(str(path)).convert("RGBA")
+        arr = np.asarray(pil, dtype=np.uint8).copy()
+        # PIL RGBA → Qt Format_ARGB32 in memory (BGRA): swap R↔B
+        arr[:, :, [0, 2]] = arr[:, :, [2, 0]]
+        h, w = arr.shape[:2]
+        return QImage(arr.data, w, h, w * 4, QImage.Format.Format_ARGB32).copy()
+    except Exception:
+        return QImage()
 
 
 # ── Character compositing ─────────────────────────────────────────────────────
@@ -72,7 +94,7 @@ def composite(atlas_path: Path, sprites: dict, emotion: str) -> "QPixmap | None"
     layers = [t.replace("{e}", emotion) for t in LAYER_ORDER if t.replace("{e}", emotion) in sprites]
     if not layers:
         return None
-    atlas = QImage(str(atlas_path))
+    atlas = _load_atlas(atlas_path)
     if atlas.isNull():
         return None
     max_w = max_h = 0
@@ -140,7 +162,7 @@ def composite_custom(selections: dict, emotion: str) -> "QPixmap | None":
     p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
     for png_path, sx, sy, sw, sh, ox, oy, rotated in layers_data:
-        atlas = QImage(png_path)
+        atlas = _load_atlas(Path(png_path))
         if atlas.isNull():
             continue
         px = round((canvas_w - sw) / 2 + ox)

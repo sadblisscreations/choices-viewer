@@ -67,7 +67,7 @@ def discover_custom_items(assets: Path) -> dict:
         char_type    = f"{gender}_{role}"
         cat          = parts[3]
 
-        if cat in ("hair", "hat", "prop") and len(parts) > 4 and parts[4] in ("b", "f"):
+        if cat in ("hair", "hat", "prop", "acc") and len(parts) > 4 and parts[4] in ("b", "f"):
             slot        = f"{cat}_{parts[4]}"
             label_parts = parts[5:]
         else:

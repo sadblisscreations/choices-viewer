@@ -118,7 +118,7 @@ class CustomBuilderTab(QWidget):
         slot_vbox.setContentsMargins(0, 2, 2, 2)
         slot_vbox.setSpacing(8)
 
-        ui_order = ["body", "face", "hair_b", "hair_f", "clothing", "hat_f", "prop_f", "prop_b", "acc", "tattoo"]
+        ui_order = ["body", "face", "hair_b", "hair_f", "clothing", "hat_f", "hat_b", "prop_f", "prop_b", "scarf", "acc_b", "acc", "tattoo"]
         for slot in ui_order:
             lbl_text = SLOT_LABELS.get(slot, slot.title())
             optional = slot in CUSTOM_OPTIONAL
