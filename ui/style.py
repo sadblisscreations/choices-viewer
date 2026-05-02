@@ -182,15 +182,19 @@ QSlider::add-page:horizontal {{
 }}
 
 QScrollBar:vertical {{
-    background: {bg};
+    background: {panel};
     width: 16px;
     border: none;
+    margin: 14px 0 14px 0;
 }}
 QScrollBar::handle:vertical {{
-    background: {bg};
+    background: {surface};
     {_RAISED}
-    min-height: 16px;
-    margin: 1px;
+    min-height: 24px;
+    margin: 0 1px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: {light};
 }}
 QScrollBar::add-line:vertical,
 QScrollBar::sub-line:vertical {{
@@ -201,17 +205,25 @@ QScrollBar::sub-line:vertical {{
 }}
 QScrollBar::add-line:vertical {{ subcontrol-position: bottom; }}
 QScrollBar::sub-line:vertical {{ subcontrol-position: top; }}
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {{
+    background: {panel};
+}}
 
 QScrollBar:horizontal {{
-    background: {bg};
+    background: {panel};
     height: 16px;
     border: none;
+    margin: 0 14px 0 14px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {bg};
+    background: {surface};
     {_RAISED}
-    min-width: 16px;
-    margin: 1px;
+    min-width: 24px;
+    margin: 1px 0;
+}}
+QScrollBar::handle:horizontal:hover {{
+    background: {light};
 }}
 QScrollBar::add-line:horizontal,
 QScrollBar::sub-line:horizontal {{
@@ -222,6 +234,10 @@ QScrollBar::sub-line:horizontal {{
 }}
 QScrollBar::add-line:horizontal {{ subcontrol-position: right; }}
 QScrollBar::sub-line:horizontal {{ subcontrol-position: left; }}
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {{
+    background: {panel};
+}}
 
 QGroupBox {{
     color: {text};

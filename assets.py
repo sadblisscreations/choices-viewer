@@ -1,5 +1,53 @@
+import hashlib
+import json
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+
+_CACHE_DIR = Path.home() / ".choices_viewer_cache"
+
+
+def _cache_path(assets: Path, kind: str) -> Path:
+    h = hashlib.md5(str(assets.resolve()).encode("utf-8")).hexdigest()[:12]
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    return _CACHE_DIR / f"{h}_{kind}.json"
+
+
+def _load_cache(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def _save_cache(path: Path, data: dict):
+    try:
+        path.write_text(json.dumps(data))
+    except Exception:
+        pass
+
+
+def _parallel_map(fn, items, on_progress=None, stage=""):
+    if not items:
+        return []
+    workers = min(32, (os.cpu_count() or 4) * 4)
+    results = [None] * len(items)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(fn, item): i for i, item in enumerate(items)}
+        done = 0
+        total = len(items)
+        for fut in futures:
+            pass
+        from concurrent.futures import as_completed
+        for fut in as_completed(futures):
+            i = futures[fut]
+            results[i] = fut.result()
+            done += 1
+            if on_progress:
+                on_progress(stage, done, total)
+    return results
 
 
 def validate_dlc_path(path: Path) -> "Path | None":
@@ -91,7 +139,7 @@ def discover_custom_items(assets: Path) -> dict:
     return result
 
 
-def discover_portrait_layers(assets: Path) -> dict:
+def discover_portrait_layers(assets: Path, on_progress=None) -> dict:
     """
     Returns non-custom portrait characters in the same format as
     discover_custom_items(): {char_type: {slot: [(label, plist_path, png_path)]}}
@@ -116,9 +164,8 @@ def discover_portrait_layers(assets: Path) -> dict:
     if not portrait_dir.exists():
         return {}
 
-    # {char_type: {slot: {base_name: (version, label, plist, png)}}}
-    seen: dict = {}
-
+    # Pre-filter and gather metadata before doing the expensive plist parse.
+    candidates = []
     for plist in sorted(portrait_dir.glob("*.plist")):
         png = plist.with_suffix(".png")
         if not png.exists():
@@ -133,7 +180,6 @@ def discover_portrait_layers(assets: Path) -> dict:
         if len(parts) < 3 or parts[0] != "portrait":
             continue
 
-        # parts[1] = book, parts[2] = role, parts[3:] = character name
         book      = parts[1]
         role      = parts[2]
         char_type = f"portrait_{role}"
@@ -144,21 +190,59 @@ def discover_portrait_layers(assets: Path) -> dict:
         else:
             label = f"{book.title()} {role.title()}"
 
-        try:
-            sprites = parse_plist(plist)
-        except Exception:
-            continue
+        candidates.append((plist, png, base_name, version, char_type, label))
 
-        present_slots: set = set()
+    # Cache parsed slot-sets keyed by path + mtime.  Re-parse only files that
+    # are new or whose mtime changed; everything else reuses the cached value.
+    cache_file = _cache_path(assets, "portrait_slots")
+    cache = _load_cache(cache_file)
+
+    def _slots_for(plist_path):
+        try:
+            sprites = parse_plist(plist_path)
+        except Exception:
+            return None
+        present: set = set()
         for key in sprites:
             if key in _KEY_SLOT:
-                present_slots.add(_KEY_SLOT[key])
+                present.add(_KEY_SLOT[key])
             elif key.startswith("FACE_"):
-                present_slots.add("face")
+                present.add("face")
+        return sorted(present)
 
+    to_parse = []
+    to_parse_idx = []
+    slot_sets: list = [None] * len(candidates)
+    for i, (plist, *_rest) in enumerate(candidates):
+        try:
+            mtime = plist.stat().st_mtime
+        except OSError:
+            continue
+        key = str(plist)
+        cached = cache.get(key)
+        if cached and cached.get("mtime") == mtime:
+            slot_sets[i] = cached.get("slots")
+        else:
+            to_parse.append(plist)
+            to_parse_idx.append((i, key, mtime))
+
+    fresh = _parallel_map(_slots_for, to_parse, on_progress, "Parsing portrait atlases")
+    new_cache = dict(cache)
+    for (i, key, mtime), slots in zip(to_parse_idx, fresh):
+        slot_sets[i] = slots
+        new_cache[key] = {"mtime": mtime, "slots": slots}
+
+    # Drop cache entries for files that no longer exist
+    live_keys = {str(c[0]) for c in candidates}
+    new_cache = {k: v for k, v in new_cache.items() if k in live_keys}
+    if new_cache != cache:
+        _save_cache(cache_file, new_cache)
+
+    # {char_type: {slot: {base_name: (version, label, plist, png)}}}
+    seen: dict = {}
+    for (plist, png, base_name, version, char_type, label), present_slots in zip(candidates, slot_sets):
         if not present_slots:
             continue
-
         ct_dict = seen.setdefault(char_type, {})
         for slot in present_slots:
             slot_dict = ct_dict.setdefault(slot, {})
@@ -175,26 +259,70 @@ def discover_portrait_layers(assets: Path) -> dict:
     return result
 
 
-def discover_ccbi_scenes(assets: Path) -> list:
+def discover_ccbi_scenes(assets: Path, on_progress=None) -> list:
     """Return [(display_name, ccbi_path)] sorted by display_name.
-    Only includes files that pass a full parse."""
+    Only includes files that pass a full parse.  Parse results are cached by
+    file path + mtime, so subsequent launches skip files known to parse OK."""
     from .parsers.ccbi_parser import parse_ccbi_file
 
     ccbi_dir = assets / "ccbi"
     if not ccbi_dir.exists():
         return []
-    result = []
+
+    candidates = []
     for ccbi in sorted(ccbi_dir.glob("*.ccbi")):
         try:
-            data = ccbi.read_bytes()[:4]
-            if data != b"ibcc":
-                continue
-            parse_ccbi_file(ccbi)
-            display = re.sub(r"-v\d+$", "", ccbi.stem)
-            display = display.replace("_", " ").strip().title()
-            result.append((display, ccbi))
-        except Exception:
+            with open(ccbi, "rb") as f:
+                if f.read(4) != b"ibcc":
+                    continue
+        except OSError:
             continue
+        candidates.append(ccbi)
+
+    cache_file = _cache_path(assets, "ccbi_ok")
+    cache = _load_cache(cache_file)
+
+    def _ok(path):
+        try:
+            parse_ccbi_file(path)
+            return True
+        except Exception:
+            return False
+
+    to_parse = []
+    to_parse_idx = []
+    ok_flags: list = [None] * len(candidates)
+    for i, ccbi in enumerate(candidates):
+        try:
+            mtime = ccbi.stat().st_mtime
+        except OSError:
+            continue
+        key = str(ccbi)
+        cached = cache.get(key)
+        if cached and cached.get("mtime") == mtime:
+            ok_flags[i] = cached.get("ok", False)
+        else:
+            to_parse.append(ccbi)
+            to_parse_idx.append((i, key, mtime))
+
+    fresh = _parallel_map(_ok, to_parse, on_progress, "Validating scenes")
+    new_cache = dict(cache)
+    for (i, key, mtime), ok in zip(to_parse_idx, fresh):
+        ok_flags[i] = ok
+        new_cache[key] = {"mtime": mtime, "ok": ok}
+
+    live_keys = {str(c) for c in candidates}
+    new_cache = {k: v for k, v in new_cache.items() if k in live_keys}
+    if new_cache != cache:
+        _save_cache(cache_file, new_cache)
+
+    result = []
+    for ccbi, ok in zip(candidates, ok_flags):
+        if not ok:
+            continue
+        display = re.sub(r"-v\d+$", "", ccbi.stem)
+        display = display.replace("_", " ").strip().title()
+        result.append((display, ccbi))
     return result
 
 

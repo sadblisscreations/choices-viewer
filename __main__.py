@@ -11,11 +11,10 @@ from pathlib import Path
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 
-from .assets import discover_books, discover_custom_items, discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes, find_characters
 from .config import load_config, resource_path, save_config
 from .assets import validate_dlc_path
 from .ui.style import BASE_STYLE
-from .ui.dialogs import FolderPickerDialog
+from .ui.dialogs import FolderPickerDialog, LoadingDialog
 from .ui.main_window import MainWindow
 
 
@@ -46,11 +45,17 @@ def main():
             sys.exit(0)
         save_config({"dlc_path": dlg.chosen_raw_path()})
 
-    characters   = find_characters(assets)
-    custom_items = {**discover_custom_items(assets), **discover_portrait_layers(assets)}
-    sheets       = discover_spritesheets(assets)
-    ccbi_scenes  = discover_ccbi_scenes(assets)
-    books        = discover_books(assets.parent / "books")
+    loading = LoadingDialog(assets)
+    if icon_path.exists():
+        loading.setWindowIcon(QIcon(str(icon_path)))
+    if loading.exec() != QDialog.DialogCode.Accepted:
+        sys.exit(0)
+    results = loading.results() or {}
+    characters   = results.get("characters", [])
+    custom_items = results.get("custom_items", {})
+    sheets       = results.get("sheets", [])
+    ccbi_scenes  = results.get("ccbi_scenes", [])
+    books        = results.get("books", [])
 
     if not characters and not custom_items and not sheets and not ccbi_scenes and not books:
         QMessageBox.critical(

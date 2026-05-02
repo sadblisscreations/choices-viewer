@@ -8,3 +8,6 @@ __pycache__/
 
 # Ignore virtual environment
 venv/
+
+# Ignore Claude Code workspace
+.claude/

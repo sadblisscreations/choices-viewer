@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QUrl, QThread, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QFileDialog, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QVBoxLayout,
+    QLabel, QLineEdit, QProgressBar, QPushButton, QVBoxLayout,
 )
 
 from ..assets import validate_dlc_path, portrait_dirs
@@ -136,3 +136,128 @@ class FolderPickerDialog(QDialog):
 
     def chosen_raw_path(self) -> str:
         return self.path_edit.text().strip()
+
+
+class DiscoveryWorker(QThread):
+    progress = pyqtSignal(str, int, int)   # stage, done, total
+    finished_loading = pyqtSignal(object)  # dict of results, or None on error
+    error = pyqtSignal(str)
+
+    def __init__(self, assets: Path):
+        super().__init__()
+        self._assets = assets
+
+    def run(self):
+        from ..assets import (
+            discover_books, discover_custom_items, discover_portrait_layers,
+            discover_spritesheets, discover_ccbi_scenes, find_characters,
+        )
+        try:
+            cb = lambda stage, done, total: self.progress.emit(stage, done, total)
+
+            self.progress.emit("Finding characters", 0, 0)
+            characters = find_characters(self._assets)
+
+            self.progress.emit("Discovering custom items", 0, 0)
+            custom = discover_custom_items(self._assets)
+
+            self.progress.emit("Parsing portrait atlases", 0, 0)
+            portraits = discover_portrait_layers(self._assets, on_progress=cb)
+            custom_items = {**custom, **portraits}
+
+            self.progress.emit("Discovering spritesheets", 0, 0)
+            sheets = discover_spritesheets(self._assets)
+
+            self.progress.emit("Validating scenes", 0, 0)
+            ccbi_scenes = discover_ccbi_scenes(self._assets, on_progress=cb)
+
+            self.progress.emit("Discovering books", 0, 0)
+            books = discover_books(self._assets.parent / "books")
+
+            self.finished_loading.emit({
+                "characters":   characters,
+                "custom_items": custom_items,
+                "sheets":       sheets,
+                "ccbi_scenes":  ccbi_scenes,
+                "books":        books,
+            })
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class LoadingDialog(QDialog):
+    def __init__(self, assets: Path):
+        super().__init__()
+        self.setWindowTitle("Choices Tool — Loading")
+        self.setStyleSheet(BASE_STYLE)
+        self.setMinimumWidth(440)
+        self.setWindowFlags(
+            (self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+            | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint
+        )
+        self._results = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("Loading your DLC cache…")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: " + TEXT + ";")
+        layout.addWidget(title)
+
+        self._note = QLabel(
+            "First-time launch parses every portrait, scene, and spritesheet.\n"
+            "Subsequent launches will be much faster — results are cached."
+        )
+        self._note.setWordWrap(True)
+        self._note.setStyleSheet("font-size: 11px; color: " + TEXT + ";")
+        layout.addWidget(self._note)
+
+        self._stage_lbl = QLabel("Starting…")
+        self._stage_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; margin-top: 6px;")
+        layout.addWidget(self._stage_lbl)
+
+        self._bar = QProgressBar()
+        self._bar.setRange(0, 0)   # busy spinner until first real progress
+        self._bar.setTextVisible(True)
+        layout.addWidget(self._bar)
+
+        self._count_lbl = QLabel("")
+        self._count_lbl.setStyleSheet("font-size: 10px; color: #808080;")
+        layout.addWidget(self._count_lbl)
+
+        self._worker = DiscoveryWorker(assets)
+        self._worker.progress.connect(self._on_progress)
+        self._worker.finished_loading.connect(self._on_done)
+        self._worker.error.connect(self._on_error)
+        self._worker.start()
+
+    def _on_progress(self, stage: str, done: int, total: int):
+        self._stage_lbl.setText(stage + "…")
+        if total > 0:
+            self._bar.setRange(0, total)
+            self._bar.setValue(done)
+            self._count_lbl.setText(f"{done} / {total}")
+        else:
+            self._bar.setRange(0, 0)
+            self._count_lbl.setText("")
+
+    def _on_done(self, results):
+        self._results = results
+        self.accept()
+
+    def _on_error(self, msg: str):
+        self._stage_lbl.setText(f"Error: {msg}")
+        self._bar.setRange(0, 1)
+        self._bar.setValue(0)
+
+    def results(self):
+        return self._results
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.move(
+            screen.center().x() - self.width() // 2,
+            screen.center().y() - self.height() // 2,
+        )
