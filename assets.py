@@ -326,6 +326,77 @@ def discover_ccbi_scenes(assets: Path, on_progress=None) -> list:
     return result
 
 
+_PORTRAIT_REF_RE = re.compile(rb"(portrait_[a-z0-9_]+?)-v\d+\.(?:png|plist)")
+
+
+def discover_character_books(books_root: Path, on_progress=None) -> dict:
+    """
+    For each book directory under *books_root*, scan every chapter .protobin
+    for portrait file references and return {book_dir_name: set(portrait_stem)}.
+
+    Each chapter's protobin field-3 asset manifest contains URLs like
+    `…/assets/portraits/{res}/portrait_anime_main_jake-v01.png` for every
+    portrait, NPC, animal, and custom-builder layer used in that chapter.
+    Extracting the version-less stems gives a complete and exact set of
+    portraits-per-book — no heuristics, no false positives.
+
+    Cached by file path + mtime; only changed/new chapters are re-parsed.
+    """
+    if not books_root.exists():
+        return {}
+
+    candidates = []  # (book_name, protobin_path)
+    for bdir in sorted(books_root.iterdir()):
+        if not bdir.is_dir():
+            continue
+        for pbin in sorted(bdir.glob("*.protobin")):
+            candidates.append((bdir.name, pbin))
+
+    cache_file = _cache_path(books_root, "char_books")
+    cache = _load_cache(cache_file)
+
+    def _stems_for(pbin):
+        try:
+            data = pbin.read_bytes()
+        except OSError:
+            return []
+        return sorted({m.group(1).decode("ascii") for m in _PORTRAIT_REF_RE.finditer(data)})
+
+    to_parse = []
+    to_parse_idx = []
+    stem_lists: list = [None] * len(candidates)
+    for i, (_book, pbin) in enumerate(candidates):
+        try:
+            mtime = pbin.stat().st_mtime
+        except OSError:
+            continue
+        key = str(pbin)
+        cached = cache.get(key)
+        if cached and cached.get("mtime") == mtime:
+            stem_lists[i] = cached.get("stems", [])
+        else:
+            to_parse.append(pbin)
+            to_parse_idx.append((i, key, mtime))
+
+    fresh = _parallel_map(_stems_for, to_parse, on_progress, "Indexing book characters")
+    new_cache = dict(cache)
+    for (i, key, mtime), stems in zip(to_parse_idx, fresh):
+        stem_lists[i] = stems
+        new_cache[key] = {"mtime": mtime, "stems": stems}
+
+    live_keys = {str(c[1]) for c in candidates}
+    new_cache = {k: v for k, v in new_cache.items() if k in live_keys}
+    if new_cache != cache:
+        _save_cache(cache_file, new_cache)
+
+    book_stems: dict = {}
+    for (book, _pbin), stems in zip(candidates, stem_lists):
+        if not stems:
+            continue
+        book_stems.setdefault(book, set()).update(stems)
+    return book_stems
+
+
 def discover_books(books_root: Path) -> list:
     """
     Return [(book_name, [(chapter_display, chapter_path)])] sorted.

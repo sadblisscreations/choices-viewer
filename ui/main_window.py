@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QDialog, QMainWindow, QMessageBox, QTabWidget,
 )
 
-from ..assets import find_characters, discover_custom_items, discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes, discover_books
+from ..assets import find_characters, discover_custom_items, discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes, discover_books, discover_character_books
 from ..config import load_config, save_config
 from .style import BASE_STYLE
 from .dialogs import FolderPickerDialog
@@ -18,7 +18,7 @@ from .about import AboutTab
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, assets: Path, characters: list, custom_items: dict, sheets: list, ccbi_scenes: list, books: list):
+    def __init__(self, assets: Path, characters: list, custom_items: dict, sheets: list, ccbi_scenes: list, books: list, char_books: dict | None = None):
         super().__init__()
         self._assets = assets
 
@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
         tabs.setDocumentMode(True)
 
-        self._chars_tab   = CharactersTab(assets, characters)
+        self._chars_tab   = CharactersTab(assets, characters, char_books or {})
         self._custom_tab  = CustomBuilderTab(assets, custom_items)
         self._effects_tab = EffectsTab(assets, sheets)
         self._scenes_tab  = ScenesTab(assets, ccbi_scenes)
@@ -71,7 +71,8 @@ class MainWindow(QMainWindow):
             )
             return
         self._assets = assets
-        self._chars_tab.refresh(assets, chars)
+        char_books = discover_character_books(assets.parent / "books")
+        self._chars_tab.refresh(assets, chars, char_books)
         self._custom_tab.update_assets(
             assets,
             {**discover_custom_items(assets), **discover_portrait_layers(assets)},

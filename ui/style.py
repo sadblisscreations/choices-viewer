@@ -136,6 +136,16 @@ QComboBox QAbstractItemView {{
     {_RAISED}
     selection-background-color: {select};
     selection-color: {select_txt};
+    outline: 0;
+}}
+QComboBox QAbstractItemView::item {{
+    padding: 3px 6px;
+    min-height: 18px;
+}}
+QComboBox QAbstractItemView::item:selected {{
+    background: {select};
+    color: {select_txt};
+    border: 1px dotted {select_l};
 }}
 
 QTabWidget::pane {{

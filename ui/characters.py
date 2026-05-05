@@ -8,11 +8,50 @@ from PyQt6.QtWidgets import (
     QScrollArea, QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
+from PyQt6.QtWidgets import QAbstractItemView, QStyledItemDelegate
+
 from ..parsers.plist_parser import parse_plist
 from ..psd import extract_sprite_layers, write_layered_psd
 from ..workers import LoadWorker, SaveAllWorker
 from .style import EMOTION_COLORS, TEXT
 from . import separator
+
+
+class _CurrentMarkerDelegate(QStyledItemDelegate):
+    """Bullets and bolds the row that matches the combo's currentIndex —
+    distinct from the hover/keyboard-focus highlight so the user can see
+    at a glance which option they previously selected."""
+
+    def __init__(self, combo):
+        super().__init__(combo)
+        self._combo = combo
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        if index.row() == self._combo.currentIndex():
+            option.text = "● " + option.text
+            f = option.font
+            f.setBold(True)
+            option.font = f
+
+
+class HighlightingComboBox(QComboBox):
+    """Scrolls to + highlights the current selection on popup, and uses
+    a delegate to mark the previously-chosen item with a bullet."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.view().setItemDelegate(_CurrentMarkerDelegate(self))
+
+    def showPopup(self):
+        super().showPopup()
+        idx = self.currentIndex()
+        if idx < 0:
+            return
+        view = self.view()
+        model_idx = self.model().index(idx, self.modelColumn())
+        view.setCurrentIndex(model_idx)
+        view.scrollTo(model_idx, QAbstractItemView.ScrollHint.PositionAtCenter)
 
 
 class EmotionCard(QWidget):
@@ -130,10 +169,11 @@ class CharacterPanel(QScrollArea):
 class CharactersTab(QWidget):
     folder_change_requested = pyqtSignal()
 
-    def __init__(self, assets: Path, characters: list):
+    def __init__(self, assets: Path, characters: list, char_books: dict | None = None):
         super().__init__()
         self._assets          = assets
         self._all             = characters
+        self._char_books      = char_books or {}   # {book_dir_name: set(char_name_lower)}
         self._worker          = None
         self._save_worker     = None
         self._current_name    = ""
@@ -141,7 +181,8 @@ class CharactersTab(QWidget):
         self._current_png     = None
         self._current_plist   = None
         self._build_ui()
-        self._populate(characters)
+        self._rebuild_book_combo()
+        self._apply_filters()
 
     def _build_ui(self):
         layout = QHBoxLayout(self)
@@ -157,9 +198,13 @@ class CharactersTab(QWidget):
         sb.setContentsMargins(8, 8, 8, 8)
         sb.setSpacing(6)
 
+        self._book_combo = HighlightingComboBox()
+        self._book_combo.setMaxVisibleItems(20)
+        self._book_combo.currentIndexChanged.connect(self._apply_filters)
+
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search characters…")
-        self._search.textChanged.connect(self._on_search)
+        self._search.textChanged.connect(self._apply_filters)
 
         self._count_lbl = QLabel()
         self._count_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; padding: 0 2px; background: transparent;")
@@ -171,6 +216,7 @@ class CharactersTab(QWidget):
         change_btn = QPushButton("Change DLC Folder…")
         change_btn.clicked.connect(self.folder_change_requested.emit)
 
+        sb.addWidget(self._book_combo)
         sb.addWidget(self._search)
         sb.addWidget(self._count_lbl)
         sb.addWidget(self._list_w)
@@ -211,11 +257,46 @@ class CharactersTab(QWidget):
         splitter.setSizes([260, 900])
         layout.addWidget(splitter)
 
-    def refresh(self, assets: Path, characters: list):
+    @staticmethod
+    def _portrait_stem(plist: Path) -> str:
+        """Version-less portrait stem (matches the keys used by the per-book
+        portrait-reference index). E.g. `portrait_anime_main_jake-v01` →
+        `portrait_anime_main_jake`."""
+        return plist.stem.split("-v")[0]
+
+    def _books_for(self, plist: Path) -> set:
+        stem = self._portrait_stem(plist)
+        return {b for b, stems in self._char_books.items() if stem in stems}
+
+    def refresh(self, assets: Path, characters: list, char_books: dict | None = None):
         self._assets = assets
         self._all    = characters
+        if char_books is not None:
+            self._char_books = char_books
         self._search.clear()
-        self._populate(characters)
+        self._rebuild_book_combo()
+        self._apply_filters()
+
+    def _rebuild_book_combo(self):
+        per_book_count: dict = {}
+        unassigned = 0
+        for _n, _p, pl in self._all:
+            bs = self._books_for(pl)
+            if not bs:
+                unassigned += 1
+                continue
+            for b in bs:
+                per_book_count[b] = per_book_count.get(b, 0) + 1
+
+        self._book_combo.blockSignals(True)
+        self._book_combo.clear()
+        self._book_combo.addItem(f"All Books ({len(self._all)})", "")
+        for b in sorted(per_book_count.keys()):
+            display = b.removeprefix("book_").replace("_", " ").title()
+            self._book_combo.addItem(f"{display} ({per_book_count[b]})", b)
+        if unassigned:
+            self._book_combo.addItem(f"— Unassigned ({unassigned})", "__unassigned__")
+        self._book_combo.blockSignals(False)
 
     def _populate(self, chars: list):
         self._list_w.blockSignals(True)
@@ -230,9 +311,20 @@ class CharactersTab(QWidget):
         if self._list_w.count():
             self._list_w.setCurrentRow(0)
 
-    def _on_search(self, text: str):
-        t = text.lower()
-        self._populate([(n, p, pl) for n, p, pl in self._all if t in n.lower()])
+    def _apply_filters(self, *_):
+        book = self._book_combo.currentData() or ""
+        t = self._search.text().lower()
+        def book_ok(pl):
+            if not book:
+                return True
+            if book == "__unassigned__":
+                return not self._books_for(pl)
+            return book in self._books_for(pl)
+        filtered = [
+            (n, p, pl) for n, p, pl in self._all
+            if book_ok(pl) and (not t or t in n.lower())
+        ]
+        self._populate(filtered)
 
     def _on_select(self, current, _prev=None):
         if current is None:

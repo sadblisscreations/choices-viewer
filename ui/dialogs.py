@@ -149,8 +149,9 @@ class DiscoveryWorker(QThread):
 
     def run(self):
         from ..assets import (
-            discover_books, discover_custom_items, discover_portrait_layers,
-            discover_spritesheets, discover_ccbi_scenes, find_characters,
+            discover_books, discover_character_books, discover_custom_items,
+            discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes,
+            find_characters,
         )
         try:
             cb = lambda stage, done, total: self.progress.emit(stage, done, total)
@@ -172,7 +173,11 @@ class DiscoveryWorker(QThread):
             ccbi_scenes = discover_ccbi_scenes(self._assets, on_progress=cb)
 
             self.progress.emit("Discovering books", 0, 0)
-            books = discover_books(self._assets.parent / "books")
+            books_root = self._assets.parent / "books"
+            books = discover_books(books_root)
+
+            self.progress.emit("Indexing book characters", 0, 0)
+            char_books = discover_character_books(books_root, on_progress=cb)
 
             self.finished_loading.emit({
                 "characters":   characters,
@@ -180,6 +185,7 @@ class DiscoveryWorker(QThread):
                 "sheets":       sheets,
                 "ccbi_scenes":  ccbi_scenes,
                 "books":        books,
+                "char_books":   char_books,
             })
         except Exception as e:
             self.error.emit(str(e))

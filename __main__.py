@@ -56,6 +56,7 @@ def main():
     sheets       = results.get("sheets", [])
     ccbi_scenes  = results.get("ccbi_scenes", [])
     books        = results.get("books", [])
+    char_books   = results.get("char_books", {})
 
     if not characters and not custom_items and not sheets and not ccbi_scenes and not books:
         QMessageBox.critical(
@@ -65,7 +66,7 @@ def main():
         )
         sys.exit(1)
 
-    win = MainWindow(assets, characters, custom_items, sheets, ccbi_scenes, books)
+    win = MainWindow(assets, characters, custom_items, sheets, ccbi_scenes, books, char_books)
     if icon_path.exists():
         win.setWindowIcon(QIcon(str(icon_path)))
     win.showMaximized()
