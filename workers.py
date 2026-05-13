@@ -11,6 +11,7 @@ from .psd import (
     write_layered_psd, extract_sprite_layers, extract_custom_layers,
     extract_sheet_frame_layers, _qimage_to_rgba,
 )
+from .parsers.ccbi_parser import CANVAS_W, CANVAS_H, setup_scene, render_scene_to_image, TextureCache
 
 
 class LoadWorker(QThread):
@@ -236,3 +237,86 @@ class SheetPsdSaveWorker(QThread):
                 self.done.emit("")
         except Exception:
             self.done.emit("")
+
+
+class SceneExportWorker(QThread):
+    progress = pyqtSignal(int, int)
+    done = pyqtSignal(str, str)
+
+    def __init__(self, ccbi_path: Path, bg_dir: Path, tex_dir: Path, seq_id: int, fmt: str, target: Path, fps: int = 24):
+        super().__init__()
+        self._ccbi_path = ccbi_path
+        self._bg_dir = bg_dir
+        self._tex_dir = tex_dir
+        self._seq_id = seq_id
+        self._fmt = fmt
+        self._target = target
+        self._fps = max(1, fps)
+
+    def run(self):
+        try:
+            scene = setup_scene(self._ccbi_path, self._bg_dir, self._tex_dir)
+            if self._seq_id is not None:
+                scene["seq_id"] = self._seq_id
+                for seq in scene.get("sequences", []):
+                    if seq.get("id") == self._seq_id:
+                        scene["duration"] = max(0.001, float(seq.get("duration") or 1.0))
+                        break
+
+            full_w = max(1, scene.get("canvas_w", CANVAS_W))
+            full_h = max(1, scene.get("canvas_h", CANVAS_H))
+            scale = min(1.0, 1280 / full_w, 720 / full_h)
+            scene["render_scale"] = scale
+            out_w = max(1, int(full_w * scale))
+            out_h = max(1, int(full_h * scale))
+            duration_s = max(0.001, float(scene.get("duration") or 1.0))
+            frame_count = max(1, min(600, int(round(duration_s * self._fps))))
+            dt = duration_s / frame_count
+            texcache = TextureCache(self._tex_dir)
+
+            frames = []
+            groups = []
+            self._target.parent.mkdir(parents=True, exist_ok=True)
+            if self._fmt == "PNG":
+                self._target.mkdir(parents=True, exist_ok=True)
+
+            for i in range(frame_count):
+                scene["time"] = i * dt
+                for em in scene.get("emitters", []):
+                    em.update(dt if i else 0.0)
+                canvas = QImage(out_w, out_h, QImage.Format.Format_ARGB32)
+                render_scene_to_image(canvas, scene, texcache)
+
+                if self._fmt == "PNG":
+                    canvas.save(str(self._target / f"frame_{i + 1:04d}.png"), "PNG")
+                elif self._fmt == "GIF":
+                    frames.append(PILImage.fromarray(_qimage_to_rgba(canvas)).convert("RGBA"))
+                else:
+                    groups.append((f"Frame {i + 1:04d}", [(f"Frame {i + 1:04d}", canvas.copy(), 0, 0)]))
+
+                self.progress.emit(i + 1, frame_count)
+
+            if self._fmt == "GIF":
+                if not frames:
+                    self.done.emit("", "No frames were rendered.")
+                    return
+                duration_ms = max(20, round(1000 / self._fps))
+                converted = []
+                for img in frames:
+                    p_img = img.quantize(colors=255, method=PILImage.Quantize.FASTOCTREE, dither=0)
+                    p_img.info["transparency"] = 0
+                    converted.append(p_img)
+                converted[0].save(
+                    str(self._target), format="GIF", save_all=True,
+                    append_images=converted[1:], duration=duration_ms,
+                    loop=0, disposal=2,
+                )
+            elif self._fmt == "PSD":
+                if not groups:
+                    self.done.emit("", "No frames were rendered.")
+                    return
+                write_layered_psd(groups, out_w, out_h, str(self._target))
+
+            self.done.emit(str(self._target), "")
+        except Exception as exc:
+            self.done.emit("", str(exc))

@@ -150,7 +150,8 @@ class DiscoveryWorker(QThread):
     def run(self):
         from ..assets import (
             discover_books, discover_character_books, discover_custom_items,
-            discover_portrait_layers, discover_spritesheets, discover_ccbi_scenes,
+            discover_portrait_layers, discover_ccbi_scenes,
+            discover_scene_books,
             find_characters,
         )
         try:
@@ -166,9 +167,6 @@ class DiscoveryWorker(QThread):
             portraits = discover_portrait_layers(self._assets, on_progress=cb)
             custom_items = {**custom, **portraits}
 
-            self.progress.emit("Discovering spritesheets", 0, 0)
-            sheets = discover_spritesheets(self._assets)
-
             self.progress.emit("Validating scenes", 0, 0)
             ccbi_scenes = discover_ccbi_scenes(self._assets, on_progress=cb)
 
@@ -179,13 +177,16 @@ class DiscoveryWorker(QThread):
             self.progress.emit("Indexing book characters", 0, 0)
             char_books = discover_character_books(books_root, on_progress=cb)
 
+            self.progress.emit("Indexing book scenes", 0, 0)
+            scene_books = discover_scene_books(books_root, on_progress=cb)
+
             self.finished_loading.emit({
                 "characters":   characters,
                 "custom_items": custom_items,
-                "sheets":       sheets,
                 "ccbi_scenes":  ccbi_scenes,
                 "books":        books,
                 "char_books":   char_books,
+                "scene_books":  scene_books,
             })
         except Exception as e:
             self.error.emit(str(e))

@@ -16,53 +16,57 @@
 
 # Choices Viewer
 
-A desktop tool for browsing and exporting assets from the mobile game *Choices: Stories You Play*. Point it at your local DLC cache folder to preview characters, build custom outfits, play back animated spritesheets and CCBI scenes, and explore chapter stories as a branching dialog graph.
+Choices Viewer is a desktop tool for browsing, previewing, and exporting assets from a local *Choices: Stories You Play* DLC cache.
 
-## Features
+Point it at the `dlc_cache` folder and it can display character portraits, custom outfit layers, animated CCBI scenes, loading screens, particle effects, book cover art, and chapter story data.
+
+## What It Does
 
 ### Characters
-- Browse every character portrait found in the DLC cache
-- Search by name and filter by source book (each portrait is matched to the books that reference it via the chapter `.protobin` asset manifest, so you see exactly which characters, NPCs and animals belong to each story)
-- View all five emotion variants per character (Neutral, Happy, Angry, Sad, Surprised)
-- Save a single emotion, the full character, or every character in the DLC cache as **PNG**, **JPEG**, or layered **PSD**
 
-### Custom Builder
-- Mix and match 13 outfit slots: body, face, hair (front/back), clothing, hat (front/back), prop (front/back), scarf/strap, accessory (front/back), tattoo
-- Live preview with debounced re-render as you change layers
-- Switch between all five emotions for the current build
-- Save the current build, or every emotion of the current build, as **PNG**, **JPEG**, or layered **PSD** (one group per emotion)
-- Works with both custom-builder items and non-custom portrait sets, mixed freely
+- Browse character portraits from the DLC cache.
+- Search by character name.
+- Filter characters by the book they appear in.
+- Preview emotion variants.
+- Save character art as PNG, JPEG, or layered PSD.
 
-### Spritesheets
-- List and search every effect spritesheet in the DLC cache
-- Frame-by-frame playback with adjustable FPS (6 – 24) and a scrubber slider
-- First / previous / play / next / last transport controls
-- CCBI-aware depth-layer detection so spritesheets that tile spatial layers (rather than animating temporally) render correctly as static composites
-- Save a single frame as **PNG**, **GIF**, or **PSD**, or save every frame as a sequence of PNGs, an animated **GIF** at the chosen FPS, or a single layered **PSD** with one frame per group
+### Custom
+
+- Build custom character outfits from body, face, hair, clothing, accessories, props, tattoos, and other layers.
+- Preview the current build live.
+- Switch between supported emotions.
+- Export custom builds as PNG, JPEG, or layered PSD.
 
 ### Scenes
-- Render CCBI scene files with animated particle effects (fire, smoke, sparkles, etc.) over the original background
-- Cached, tinted texture atlas for fast emitter rendering
-- Scene navigation, restart button, and live emitter / particle / sequence-name readout
-- Search and filter the scene list
+
+- Browse CCBI scene files from the DLC cache.
+- Filter scenes by book.
+- Search scene names.
+- Preview animated scene sequences, loading screens, overlays, backgrounds, and particle effects.
+- Switch between available CCBI sequences.
+- Export scene animations as PNG sequences, GIFs, or layered PSD files.
 
 ### Books
-- Explore every chapter `.protobin` as an interactive branching dialog graph
-- Dialog blocks, choice forks, and chapter breaks are colour-coded and connected with flow lines
-- Speaker names and emotion tags shown alongside each line
-- Heuristic protobuf decoder works with or without `google.protobuf` installed
+
+- Browse books with store-card cover art when available.
+- Filter books by genre.
+- Search book titles.
+- Open chapters from `.protobin` files.
+- View readable story flow with dialog and choices.
 
 ### General
-- First-launch folder picker with live DLC validation; change folder later without restarting
-- Parallel asset discovery with persistent on-disk cache for near-instant subsequent launches
-- Loading screen with per-stage progress
-- HiDPI / 4K aware
-- Dark Windows-98-style theme
+
+- First-launch DLC folder picker.
+- Saved DLC folder path for later launches.
+- Folder switching from inside the app.
+- Parallel asset discovery and cached indexes for faster loading.
+- HiDPI-aware PyQt interface.
+- Dark desktop theme.
 
 ## Requirements
 
 - Python 3.10+
-- The game's DLC cache folder on your local machine
+- A local *Choices* DLC cache folder
 
 ## Setup
 
@@ -78,19 +82,21 @@ Run from the parent directory of the `choices_viewer` folder:
 python -m choices_viewer
 ```
 
-On first launch you will be prompted to select your DLC cache folder. The path is saved so you only need to do this once. You can change it later from the Characters tab.
+On first launch, choose your DLC cache folder. The app expects the folder that contains the cache assets and books, usually named `dlc_cache`.
 
-## Building a standalone executable
+## Building
 
 ```bash
 pip install pyinstaller
 pyinstaller --onefile --windowed --name choices-viewer choices_viewer/__main__.py
 ```
 
-The executable will be in the `dist/` folder.
+The executable will be created in the `dist` folder.
 
-## Contributors
+## Credits
 
-- [sadblisscreations](https://github.com/sadblisscreations)
+Written by sadblisscreations
+
 - [Claude](https://claude.ai)
-- [Kimi](https://github.com/moonshot-ai) (Books tab / branching story graph, parser improvements, UI polish)
+- [Kimi](https://kimi.com)
+- [ChatGPT Codex](https://chatgpt.com)

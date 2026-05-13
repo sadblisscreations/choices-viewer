@@ -261,16 +261,14 @@ def discover_portrait_layers(assets: Path, on_progress=None) -> dict:
 
 def discover_ccbi_scenes(assets: Path, on_progress=None) -> list:
     """Return [(display_name, ccbi_path)] sorted by display_name.
-    Only includes files that pass a full parse.  Parse results are cached by
-    file path + mtime, so subsequent launches skip files known to parse OK."""
-    from .parsers.ccbi_parser import parse_ccbi_file
-
-    ccbi_dir = assets / "ccbi"
-    if not ccbi_dir.exists():
-        return []
+    Includes every CCBI with the expected ibcc header; any scene-specific parse
+    problem is reported when that scene is selected instead of hiding the file."""
 
     candidates = []
-    for ccbi in sorted(ccbi_dir.glob("*.ccbi")):
+    for ccbi in sorted(assets.rglob("*.ccbi"), key=lambda p: (
+        0 if "loading_screens_ccbi_240" in str(p.relative_to(assets)).lower().replace("\\", "/") else 1,
+        str(p.relative_to(assets)).lower(),
+    )):
         try:
             with open(ccbi, "rb") as f:
                 if f.read(4) != b"ibcc":
@@ -279,54 +277,17 @@ def discover_ccbi_scenes(assets: Path, on_progress=None) -> list:
             continue
         candidates.append(ccbi)
 
-    cache_file = _cache_path(assets, "ccbi_ok")
-    cache = _load_cache(cache_file)
-
-    def _ok(path):
-        try:
-            parse_ccbi_file(path)
-            return True
-        except Exception:
-            return False
-
-    to_parse = []
-    to_parse_idx = []
-    ok_flags: list = [None] * len(candidates)
-    for i, ccbi in enumerate(candidates):
-        try:
-            mtime = ccbi.stat().st_mtime
-        except OSError:
-            continue
-        key = str(ccbi)
-        cached = cache.get(key)
-        if cached and cached.get("mtime") == mtime:
-            ok_flags[i] = cached.get("ok", False)
-        else:
-            to_parse.append(ccbi)
-            to_parse_idx.append((i, key, mtime))
-
-    fresh = _parallel_map(_ok, to_parse, on_progress, "Validating scenes")
-    new_cache = dict(cache)
-    for (i, key, mtime), ok in zip(to_parse_idx, fresh):
-        ok_flags[i] = ok
-        new_cache[key] = {"mtime": mtime, "ok": ok}
-
-    live_keys = {str(c) for c in candidates}
-    new_cache = {k: v for k, v in new_cache.items() if k in live_keys}
-    if new_cache != cache:
-        _save_cache(cache_file, new_cache)
-
     result = []
-    for ccbi, ok in zip(candidates, ok_flags):
-        if not ok:
-            continue
-        display = re.sub(r"-v\d+$", "", ccbi.stem)
-        display = display.replace("_", " ").strip().title()
+    for ccbi in candidates:
+        rel = ccbi.relative_to(assets)
+        display = re.sub(r"-v\d+$", "", str(rel.with_suffix("")))
+        display = display.replace("\\", " / ").replace("_", " ").strip().title()
         result.append((display, ccbi))
     return result
 
 
 _PORTRAIT_REF_RE = re.compile(rb"(portrait_[a-z0-9_]+?)-v\d+\.(?:png|plist)")
+_CCBI_REF_RE = re.compile(rb"/assets/([a-z0-9_./\\-]+?)-v\d+\.ccbi")
 
 
 def discover_character_books(books_root: Path, on_progress=None) -> dict:
@@ -395,6 +356,71 @@ def discover_character_books(books_root: Path, on_progress=None) -> dict:
             continue
         book_stems.setdefault(book, set()).update(stems)
     return book_stems
+
+
+def discover_scene_books(books_root: Path, on_progress=None) -> dict:
+    """
+    For each book directory under *books_root*, scan chapter .protobin files for
+    CCBI references and return {book_dir_name: set(scene_keys)}.
+    """
+    if not books_root.exists():
+        return {}
+
+    candidates = []
+    for bdir in sorted(books_root.iterdir()):
+        if not bdir.is_dir():
+            continue
+        for pbin in sorted(bdir.glob("*.protobin")):
+            candidates.append((bdir.name, pbin))
+
+    cache_file = _cache_path(books_root, "scene_books")
+    cache = _load_cache(cache_file)
+
+    def _keys_for(pbin):
+        try:
+            data = pbin.read_bytes()
+        except OSError:
+            return []
+        keys = set()
+        for m in _CCBI_REF_RE.finditer(data):
+            rel = m.group(1).decode("ascii", "ignore").replace("\\", "/")
+            keys.add(rel)
+            keys.add(Path(rel).name)
+        return sorted(keys)
+
+    to_parse = []
+    to_parse_idx = []
+    key_lists: list = [None] * len(candidates)
+    for i, (_book, pbin) in enumerate(candidates):
+        try:
+            mtime = pbin.stat().st_mtime
+        except OSError:
+            continue
+        key = str(pbin)
+        cached = cache.get(key)
+        if cached and cached.get("mtime") == mtime:
+            key_lists[i] = cached.get("keys", [])
+        else:
+            to_parse.append(pbin)
+            to_parse_idx.append((i, key, mtime))
+
+    fresh = _parallel_map(_keys_for, to_parse, on_progress, "Indexing book scenes")
+    new_cache = dict(cache)
+    for (i, key, mtime), keys in zip(to_parse_idx, fresh):
+        key_lists[i] = keys
+        new_cache[key] = {"mtime": mtime, "keys": keys}
+
+    live_keys = {str(c[1]) for c in candidates}
+    new_cache = {k: v for k, v in new_cache.items() if k in live_keys}
+    if new_cache != cache:
+        _save_cache(cache_file, new_cache)
+
+    book_scenes: dict = {}
+    for (book, _pbin), keys in zip(candidates, key_lists):
+        if not keys:
+            continue
+        book_scenes.setdefault(book, set()).update(keys)
+    return book_scenes
 
 
 def discover_books(books_root: Path) -> list:

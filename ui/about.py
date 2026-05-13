@@ -87,10 +87,24 @@ class AboutTab(QWidget):
         # Sunken separator
         vbox.addWidget(separator())
 
-        written_lbl = QLabel("Written by sadblisscreations and Claude")
+        written_lbl = QLabel("Written by sadblisscreations\n\nClaude\nKimi\nChatGPT Codex")
         written_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         written_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; border: none; background: transparent;")
         vbox.addWidget(written_lbl)
+
+        def add_link(label: str, url: str) -> None:
+            btn = QPushButton(label)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent; border: none;
+                    color: #4fc1ff; font-size: 11px;
+                    padding: 0;
+                }
+                QPushButton:hover { color: #ffffff; text-decoration: underline; }
+            """)
+            btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+            vbox.addWidget(btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         claude_btn = QPushButton("claude.ai")
         claude_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -106,26 +120,7 @@ class AboutTab(QWidget):
             lambda: QDesktopServices.openUrl(QUrl("https://claude.ai/"))
         )
         vbox.addWidget(claude_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        # Sunken separator
-        vbox.addWidget(separator())
-
-        # Effects note
-        note_hdr = QLabel("Note on the Spritesheets Tab")
-        note_hdr.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        note_hdr.setStyleSheet(
-            "font-size: 11px; font-weight: bold; color: " + TEXT + "; border: none; background: transparent;"
-        )
-        vbox.addWidget(note_hdr)
-
-        note_lbl = QLabel(
-            "The Spritesheets tab is a hit or miss — some spritesheets will render\n"
-            "correctly while others may not display as expected.\n"
-            "This is a known limitation."
-        )
-        note_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        note_lbl.setWordWrap(True)
-        note_lbl.setStyleSheet("font-size: 11px; color: " + TEXT + "; border: none; background: transparent;")
-        vbox.addWidget(note_lbl)
+        add_link("kimi.com", "https://kimi.com/")
+        add_link("chatgpt.com", "https://chatgpt.com/")
 
         outer.addWidget(box, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)

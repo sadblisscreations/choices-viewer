@@ -53,12 +53,12 @@ def main():
     results = loading.results() or {}
     characters   = results.get("characters", [])
     custom_items = results.get("custom_items", {})
-    sheets       = results.get("sheets", [])
     ccbi_scenes  = results.get("ccbi_scenes", [])
     books        = results.get("books", [])
     char_books   = results.get("char_books", {})
+    scene_books  = results.get("scene_books", {})
 
-    if not characters and not custom_items and not sheets and not ccbi_scenes and not books:
+    if not characters and not custom_items and not ccbi_scenes and not books:
         QMessageBox.critical(
             None, "No Content Found",
             f"No portrait files were found in:\n{assets}\n\n"
@@ -66,7 +66,7 @@ def main():
         )
         sys.exit(1)
 
-    win = MainWindow(assets, characters, custom_items, sheets, ccbi_scenes, books, char_books)
+    win = MainWindow(assets, characters, custom_items, ccbi_scenes, books, char_books, scene_books)
     if icon_path.exists():
         win.setWindowIcon(QIcon(str(icon_path)))
     win.showMaximized()

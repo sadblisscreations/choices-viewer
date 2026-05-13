@@ -1,19 +1,24 @@
+import re
 import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QImage, QPainter, QColor
 from PyQt6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QLineEdit,
+    QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMessageBox, QPushButton,
     QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
 from ..parsers.ccbi_parser import CANVAS_W, CANVAS_H, setup_scene, render_scene_to_image, TextureCache
+from ..workers import SceneExportWorker
 from .style import TEXT
 from . import separator
+from .characters import HighlightingComboBox
 
 CANVAS_BG = QColor(15, 15, 26)
+MAX_PREVIEW_W = 1280
+MAX_PREVIEW_H = 720
 
 
 class ScenePreview(QWidget):
@@ -25,13 +30,25 @@ class ScenePreview(QWidget):
         self._canvas.fill(CANVAS_BG)
         self._last_time = time.perf_counter()
         self._particle_count = 0
+        self._dirty = True
         self.setMinimumSize(320, 260)
         self.setStyleSheet("background: #0f0f1a;")
 
     def set_scene(self, ccbi_path: Path, bg_dir: Path, tex_dir: Path):
         self._scene = setup_scene(ccbi_path, bg_dir, tex_dir)
         self._texcache = TextureCache(tex_dir)
+        full_w = max(1, self._scene.get("canvas_w", CANVAS_W))
+        full_h = max(1, self._scene.get("canvas_h", CANVAS_H))
+        scale = min(1.0, MAX_PREVIEW_W / full_w, MAX_PREVIEW_H / full_h)
+        self._scene["render_scale"] = scale
+        self._canvas = QImage(
+            max(1, int(full_w * scale)),
+            max(1, int(full_h * scale)),
+            QImage.Format.Format_ARGB32,
+        )
+        self._canvas.fill(CANVAS_BG)
         self._last_time = time.perf_counter()
+        self._dirty = True
         self.update()
 
     def restart(self):
@@ -58,29 +75,62 @@ class ScenePreview(QWidget):
     def scene_seqs(self) -> list:
         return self._scene.get("seqs", []) if self._scene else []
 
+    def sequences(self) -> list:
+        return self._scene.get("sequences", []) if self._scene else []
+
+    def current_sequence_id(self) -> int:
+        return self._scene.get("seq_id", 0) if self._scene else 0
+
+    def set_sequence(self, seq_id: int):
+        if not self._scene:
+            return
+        self._scene["seq_id"] = seq_id
+        self._scene["duration"] = 1.0
+        for seq in self._scene.get("sequences", []):
+            if seq.get("id") == seq_id:
+                self._scene["duration"] = max(0.001, float(seq.get("duration") or 1.0))
+                break
+        self._scene["time"] = 0.0
+        self._last_time = time.perf_counter()
+        self._dirty = True
+        self.update()
+
+    def _needs_tick(self) -> bool:
+        if not self._scene:
+            return False
+        seq_id = self._scene.get("seq_id", 0)
+        if seq_id in self._scene.get("animated_seq_ids", set()):
+            return True
+        return any(e.active or e.particles for e in self._scene.get("emitters", []))
+
     def tick(self):
         if not self._scene:
             return
         now = time.perf_counter()
         dt = min(now - self._last_time, 0.05)
         self._last_time = now
+        if not self._needs_tick():
+            return
+        self._scene["time"] = (self._scene.get("time", 0.0) + dt) % max(0.001, self._scene.get("duration", 1.0))
         for em in self._scene["emitters"]:
             em.update(dt)
+        self._dirty = True
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-        if self._scene and self._texcache:
+        if self._scene and self._texcache and self._dirty:
             self._particle_count = render_scene_to_image(self._canvas, self._scene, self._texcache)
+            self._dirty = False
 
-        src = QRect(0, 0, CANVAS_W, CANVAS_H)
+        src = QRect(0, 0, self._canvas.width(), self._canvas.height())
         scale_w = self.width()
-        scale_h = int(self.width() * CANVAS_H / CANVAS_W)
+        scale_h = int(self.width() * self._canvas.height() / max(1, self._canvas.width()))
         if scale_h > self.height():
             scale_h = self.height()
-            scale_w = int(self.height() * CANVAS_W / CANVAS_H)
+            scale_w = int(self.height() * self._canvas.width() / max(1, self._canvas.height()))
         x = (self.width() - scale_w) // 2
         y = (self.height() - scale_h) // 2
         dst = QRect(x, y, scale_w, scale_h)
@@ -90,18 +140,21 @@ class ScenePreview(QWidget):
 
 
 class ScenesTab(QWidget):
-    def __init__(self, assets: Path, scenes: list):
+    def __init__(self, assets: Path, scenes: list, scene_books: dict | None = None):
         super().__init__()
         self._assets = assets
         self._scenes = scenes
+        self._scene_books = scene_books or {}
+        self._scene_book_index = {}
+        self._scene_books_cache = {}
+        self._rebuild_scene_book_index()
+        self._export_worker = None
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_tick)
-        self._timer.start(16)
+        self._timer.start(33)
 
         self._build_ui()
-        if scenes:
-            self._list.setCurrentRow(0)
 
     def _build_ui(self):
         outer = QHBoxLayout(self)
@@ -122,6 +175,11 @@ class ScenesTab(QWidget):
         hdr.setStyleSheet("font-size: 10px; font-weight: bold; color: " + TEXT + "; letter-spacing: 1px;")
         lv.addWidget(hdr)
 
+        self._book_combo = HighlightingComboBox()
+        self._book_combo.setMaxVisibleItems(20)
+        self._book_combo.currentIndexChanged.connect(self._filter_list)
+        lv.addWidget(self._book_combo)
+
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search…")
         self._search.textChanged.connect(self._filter_list)
@@ -129,10 +187,6 @@ class ScenesTab(QWidget):
 
         self._list = QListWidget()
         self._list.setUniformItemSizes(True)
-        for name, ccbi in self._scenes:
-            item = QListWidgetItem(name)
-            item.setData(Qt.ItemDataRole.UserRole, ccbi)
-            self._list.addItem(item)
         self._list.currentItemChanged.connect(self._on_select)
         lv.addWidget(self._list, stretch=1)
 
@@ -166,16 +220,27 @@ class ScenesTab(QWidget):
         self._prev_btn = QPushButton("<")
         self._next_btn = QPushButton(">")
         self._restart_btn = QPushButton("Restart")
-        for btn in (self._prev_btn, self._next_btn, self._restart_btn):
+        self._export_btn = QPushButton("Save Scene...")
+        for btn in (self._prev_btn, self._next_btn, self._restart_btn, self._export_btn):
             btn.setFixedHeight(26)
 
         self._prev_btn.clicked.connect(self._prev_scene)
         self._next_btn.clicked.connect(self._next_scene)
         self._restart_btn.clicked.connect(self._restart)
+        self._export_btn.clicked.connect(self._export_scene)
+        self._export_btn.setEnabled(False)
 
         ctrl_row.addWidget(self._prev_btn)
         ctrl_row.addWidget(self._next_btn)
         ctrl_row.addWidget(self._restart_btn)
+        self._seq_combo = QComboBox()
+        self._seq_combo.setMinimumWidth(280)
+        self._seq_combo.currentIndexChanged.connect(self._on_sequence_changed)
+        ctrl_row.addWidget(self._seq_combo, stretch=1)
+        self._export_combo = QComboBox()
+        self._export_combo.addItems(["PNG Sequence", "GIF", "PSD"])
+        ctrl_row.addWidget(self._export_combo)
+        ctrl_row.addWidget(self._export_btn)
         ctrl_row.addStretch()
         rv.addLayout(ctrl_row)
 
@@ -185,25 +250,131 @@ class ScenesTab(QWidget):
         splitter.setStretchFactor(1, 1)
         outer.addWidget(splitter)
 
-    def _filter_list(self, text: str):
-        t = text.lower()
-        for i in range(self._list.count()):
-            item = self._list.item(i)
-            item.setHidden(bool(t) and t not in item.text().lower())
+        self._rebuild_book_combo()
+        self._filter_list()
+
+    @staticmethod
+    def _book_display(book: str) -> str:
+        return book.removeprefix("book_").replace("_", " ").strip().title()
+
+    def _scene_keys_for(self, ccbi: Path) -> set:
+        keys = {ccbi.stem.split("-v")[0]}
+        try:
+            rel_key = str(ccbi.relative_to(self._assets).with_suffix("")).replace("\\", "/")
+            keys.add(rel_key.split("-v")[0])
+        except ValueError:
+            pass
+        return keys
+
+    def _rebuild_scene_book_index(self):
+        self._scene_book_index = {}
+        self._scene_books_cache = {}
+        for book, keys in self._scene_books.items():
+            for key in keys:
+                self._scene_book_index.setdefault(key, set()).add(book)
+
+    def _books_for(self, ccbi: Path) -> set:
+        cache_key = str(ccbi)
+        cached = self._scene_books_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        keys = self._scene_keys_for(ccbi)
+        books = set()
+        for key in keys:
+            books.update(self._scene_book_index.get(key, ()))
+        self._scene_books_cache[cache_key] = books
+        return books
+
+    def _rebuild_book_combo(self):
+        per_book_count: dict = {}
+        unassigned = 0
+        for _name, ccbi in self._scenes:
+            books = self._books_for(ccbi)
+            if not books:
+                unassigned += 1
+                continue
+            for book in books:
+                per_book_count[book] = per_book_count.get(book, 0) + 1
+
+        self._book_combo.blockSignals(True)
+        self._book_combo.clear()
+        self._book_combo.addItem(f"All Books ({len(self._scenes)})", "")
+        for book in sorted(per_book_count.keys()):
+            self._book_combo.addItem(f"{self._book_display(book)} ({per_book_count[book]})", book)
+        if unassigned:
+            self._book_combo.addItem(f"— Unassigned ({unassigned})", "__unassigned__")
+        self._book_combo.blockSignals(False)
+
+    def _sort_key(self, scene):
+        name, ccbi = scene
+        books = sorted(self._books_for(ccbi))
+        if books:
+            return (0, self._book_display(books[0]).lower(), name.lower())
+        return (1, "zzzzzz", name.lower())
+
+    def _filter_list(self, *_):
+        book = self._book_combo.currentData() or ""
+        t = self._search.text().lower()
+
+        def book_ok(ccbi):
+            books = self._books_for(ccbi)
+            if not book:
+                return True
+            if book == "__unassigned__":
+                return not books
+            return book in books
+
+        filtered = [
+            (name, ccbi) for name, ccbi in self._scenes
+            if book_ok(ccbi) and (not t or t in name.lower())
+        ]
+        filtered.sort(key=self._sort_key)
+
+        current = self._list.currentItem()
+        current_path = current.data(Qt.ItemDataRole.UserRole) if current else None
+        self._list.blockSignals(True)
+        self._list.clear()
+        restore_row = -1
+        for name, ccbi in filtered:
+            books = sorted(self._books_for(ccbi))
+            label = name
+            if not book and books:
+                label = f"{self._book_display(books[0])} - {name}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, ccbi)
+            item.setData(Qt.ItemDataRole.UserRole + 1, name)
+            self._list.addItem(item)
+            if current_path is not None and ccbi == current_path:
+                restore_row = self._list.count() - 1
+        n = len(filtered)
+        self._count_lbl.setText(f"{n} scene{'s' if n != 1 else ''}")
+        if restore_row >= 0:
+            self._list.setCurrentRow(restore_row)
+        self._list.blockSignals(False)
+        if not self._list.count():
+            self._preview._scene = None
+            self._seq_combo.clear()
+            self._export_btn.setEnabled(False)
+            self._preview.update()
 
     def _on_select(self, current, _prev=None):
         if current is None:
             return
         ccbi_path = current.data(Qt.ItemDataRole.UserRole)
-        self._title_lbl.setText(current.text())
+        scene_name = current.data(Qt.ItemDataRole.UserRole + 1) or current.text()
+        self._title_lbl.setText(scene_name)
         bg_dir = self._assets / "backgrounds" / "large"
         tex_dir = self._assets / "ccbi_images" / "2x"
         try:
             self._preview.set_scene(ccbi_path, bg_dir, tex_dir)
+            self._populate_sequences()
             self._preview.start_animation()
+            self._export_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.warning(self, "Error Loading Scene", f"Failed to parse CCBI file:\n{ccbi_path.name}\n\n{e}")
             self._preview._scene = None
+            self._seq_combo.clear()
+            self._export_btn.setEnabled(False)
             self._preview.update()
 
     def _prev_scene(self):
@@ -218,9 +389,95 @@ class ScenesTab(QWidget):
 
     def _restart(self):
         self._preview.restart()
+        self._populate_sequences()
+
+    def _populate_sequences(self):
+        self._seq_combo.blockSignals(True)
+        self._seq_combo.clear()
+        current_id = self._preview.current_sequence_id()
+        current_index = 0
+        for i, seq in enumerate(self._preview.sequences()):
+            duration = float(seq.get("duration") or 0)
+            label = f"{seq.get('name', 'Timeline')} ({duration:.2f}s)"
+            self._seq_combo.addItem(label, int(seq.get("id", 0)))
+            if int(seq.get("id", 0)) == current_id:
+                current_index = i
+        if self._seq_combo.count():
+            self._seq_combo.setCurrentIndex(current_index)
+        self._seq_combo.blockSignals(False)
+
+    def _on_sequence_changed(self, index: int):
+        if index < 0:
+            return
+        seq_id = self._seq_combo.itemData(index)
+        if seq_id is not None:
+            self._preview.set_sequence(int(seq_id))
+
+    def _safe_scene_name(self) -> str:
+        item = self._list.currentItem()
+        name = item.data(Qt.ItemDataRole.UserRole + 1) if item else "scene"
+        name = re.sub(r"\s+", "_", str(name).strip().lower())
+        return re.sub(r'[<>:"/\\|?*]', "_", name) or "scene"
+
+    def _export_scene(self):
+        item = self._list.currentItem()
+        if item is None or not self._preview._scene:
+            return
+
+        fmt_label = self._export_combo.currentText()
+        safe = self._safe_scene_name()
+        if fmt_label == "PNG Sequence":
+            folder = QFileDialog.getExistingDirectory(
+                self, "Save PNG Sequence", str(Path.home() / f"{safe}_frames")
+            )
+            if not folder:
+                return
+            target = Path(folder)
+            fmt = "PNG"
+        elif fmt_label == "GIF":
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save Scene as GIF", str(Path.home() / f"{safe}.gif"), "GIF (*.gif)"
+            )
+            if not path:
+                return
+            target = Path(path)
+            fmt = "GIF"
+        else:
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save Scene as Layered PSD", str(Path.home() / f"{safe}.psd"), "Photoshop PSD (*.psd)"
+            )
+            if not path:
+                return
+            target = Path(path)
+            fmt = "PSD"
+
+        ccbi_path = item.data(Qt.ItemDataRole.UserRole)
+        bg_dir = self._assets / "backgrounds" / "large"
+        tex_dir = self._assets / "ccbi_images" / "2x"
+        self._export_btn.setEnabled(False)
+        self._info_lbl.setText("Exporting scene...")
+        self._export_worker = SceneExportWorker(
+            ccbi_path, bg_dir, tex_dir, self._preview.current_sequence_id(), fmt, target
+        )
+        self._export_worker.progress.connect(self._on_export_progress)
+        self._export_worker.done.connect(self._on_export_done)
+        self._export_worker.start()
+
+    def _on_export_progress(self, done: int, total: int):
+        self._info_lbl.setText(f"Exporting scene: {done}/{total}")
+
+    def _on_export_done(self, path: str, error: str):
+        self._export_btn.setEnabled(self._preview._scene is not None)
+        self._export_worker = None
+        if path:
+            QMessageBox.information(self, "Saved", f"Saved scene export to:\n{path}")
+        else:
+            QMessageBox.warning(self, "Error", f"Failed to export scene:\n{error or 'Unknown error'}")
 
     def _on_tick(self):
         self._preview.tick()
+        if self._export_worker is not None:
+            return
         if self._preview._scene:
             active = self._preview.active_emitters()
             total = self._preview.total_emitters()
@@ -230,17 +487,12 @@ class ScenesTab(QWidget):
                 f"Emitters: {total} (active {active})  •  Particles: {parts}  •  Seqs: {seqs}"
             )
 
-    def update_assets(self, assets: Path, scenes: list):
+    def update_assets(self, assets: Path, scenes: list, scene_books: dict | None = None):
         self._assets = assets
         self._scenes = scenes
-        self._list.clear()
-        for name, ccbi in scenes:
-            item = QListWidgetItem(name)
-            item.setData(Qt.ItemDataRole.UserRole, ccbi)
-            self._list.addItem(item)
-        self._count_lbl.setText(f"{len(scenes)} scenes")
-        if self._list.count():
-            self._list.setCurrentRow(0)
-        else:
-            self._preview._scene = None
-            self._preview.update()
+        if scene_books is not None:
+            self._scene_books = scene_books
+        self._rebuild_scene_book_index()
+        self._search.clear()
+        self._rebuild_book_combo()
+        self._filter_list()

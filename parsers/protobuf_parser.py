@@ -199,8 +199,9 @@ def build_story(path: Path):
                 if len(positive) > 4:
                     positive = positive[-4:]
 
-                real_opts = [{"text": label, "node_index": j + 1} for _s, label, _t in positive if label]
+                real_opts = [{"text": _clean_text(label), "node_index": j + 1} for _s, label, _t in positive if label]
                 real_opts = [o for o in real_opts if not _is_meta_option(o["text"])]
+                real_opts = [o for o in real_opts if _is_meaningful_story_text(o["text"])]
                 choice_spans.append((j + 1, footer_end, real_opts))
             i = footer_end
         else:
@@ -230,40 +231,68 @@ def build_story(path: Path):
                 texts.append(text_of(nodes[i]))
                 i += 1
 
-            speaker, text, emotion = _extract_dialog(texts)
+            speaker, text, emotion = (_clean_text(v) for v in _extract_dialog(texts))
             if text and _is_meaningful_dialog(text, speaker, emotion):
                 story.append({"type": "dialog", "speaker": speaker, "text": text, "emotion": emotion, "node_index": first_idx})
             continue
 
-        if typ == 20:
+        if False:
             story.append({"type": "break", "text": "— break —", "node_index": i})
             i += 1
             continue
 
         i += 1
 
-    # Post-process
+    # Post-process: keep reader-facing story beats only.
     filtered = []
     for ev in story:
-        if ev["type"] == "break":
-            if not filtered or filtered[-1]["type"] != "break":
-                filtered.append(ev)
-        else:
-            filtered.append(ev)
+        if ev["type"] == "choice" and not ev.get("options"):
+            continue
+        filtered.append(ev)
 
-    while filtered and filtered[0]["type"] == "break":
-        filtered.pop(0)
+    for idx, ev in enumerate(filtered):
+        title = ""
+        if ev["type"] == "dialog":
+            title = ev.get("text", "")
+        elif ev["type"] == "choice":
+            title = next((opt.get("text", "") for opt in ev.get("options", []) if opt.get("text", "").lower().startswith("chapter ")), "")
+        if title.lower().startswith("chapter "):
+            title_event = {"type": "dialog", "speaker": "", "text": title, "emotion": "", "node_index": ev.get("node_index", 0)}
+            filtered = [title_event] + filtered[idx + 1:]
+            break
 
     return filtered
 
 
+def _clean_text(text: str) -> str:
+    text = str(text or "").strip()
+    for tag in ("cayenne", "premium", "choice", "b", "i"):
+        text = text.replace(f"<{tag}>", "").replace(f"</{tag}>", "")
+    return " ".join(text.split())
+
+
 def _is_asset_or_var(text: str) -> bool:
+    text = str(text or "").strip()
+    low = text.lower()
     prefixes = (
         "IMG_", "BGZ_", "SFX_", "MUSIC_", "BOOK_VAR_",
         "PREM_", "OUTFIT_", "CUSTOM_ITEM_", "EFFECT_",
-        "CLOSET_",
+        "CLOSET_", "CCB_", "CCB_LAYER_", "TIMELINE_", "OVERLAY_",
+        "ENV_", "BG_", "LI_", "EMOTE_", "BGM_",
     )
-    return any(text.startswith(p) for p in prefixes)
+    if any(low.startswith(p.lower()) for p in prefixes):
+        return True
+    if low.startswith("book_var_") or low.startswith("assets/") or low.startswith("/assets/"):
+        return True
+    if low.endswith((".png", ".jpg", ".jpeg", ".plist", ".ccbi", ".ccb", ".mp3", ".m4a", ".wav")):
+        return True
+    if "/" in low or "\\" in low:
+        return True
+    if "_" in text and text.upper() == text and len(text) > 8:
+        return True
+    if "_" in low and any(part in low for part in ("portrait_", "item_", "particle", "neutral", "blocking")):
+        return True
+    return False
 
 
 def _is_meta_option(text: str) -> bool:
@@ -277,14 +306,45 @@ def _is_meta_option(text: str) -> bool:
     return any(m in low for m in meta)
 
 
+def _is_meaningful_story_text(text: str) -> bool:
+    text = _clean_text(text)
+    if not text or _is_asset_or_var(text):
+        return False
+    bare = text.lower()
+    if bare in {"continue", "white", "black", "asian", "hispanic", "riley"}:
+        return False
+    if _looks_like_speaker(text):
+        return False
+    return len(text) > 3
+
+
 def _is_meaningful_dialog(text: str, speaker: str, emotion: str) -> bool:
     if not text.strip():
         return False
-    if _is_asset_or_var(text):
+    if _is_asset_or_var(text) or _is_asset_or_var(speaker):
         return False
     bare = text.strip().lower()
+    if speaker.lower().startswith("enter the name"):
+        return False
     # Skip bare speaker names, short tags, and UI words
     if bare in ("continue", "you", "c.man", "c.sir", "c.him", "c.her", "c.his") and not speaker and not emotion:
+        return False
+    if bare in ("white", "black", "asian", "hispanic", "riley"):
+        return False
+    if bare.startswith("what's your name?"):
+        return False
+    if _looks_like_speaker(text) and not speaker:
+        return False
+    words = text.strip().split()
+    if (
+        len(text) <= 32
+        and words
+        and words[0] in {"HAPPY", "SAD", "ANGRY", "SURPRISED", "NEUTRAL", "FLIRT", "FLIRTY", "SCARED"}
+    ):
+        return False
+    if len(text) <= 30 and not speaker and not any(mark in text for mark in ".!?"):
+        return False
+    if len(text) <= 30 and text.endswith("Formal"):
         return False
     if len(bare) <= 3:
         return False
@@ -295,9 +355,10 @@ def _pick_option_label(texts: list[str]) -> str:
     if not texts:
         return ""
     for t in texts:
-        if not _is_asset_or_var(t) and t.strip():
+        t = _clean_text(t)
+        if _is_meaningful_story_text(t):
             return t
-    return texts[0]
+    return _clean_text(texts[0])
 
 
 def _sentence_count(text: str) -> int:
@@ -311,7 +372,7 @@ def _choice_option_score(texts: list[str]) -> int:
     if not texts:
         return -10
 
-    primary = texts[0].strip()
+    primary = _clean_text(texts[0])
     if not primary:
         return -10
 
@@ -388,7 +449,7 @@ def _looks_like_speaker(text: str) -> bool:
 
 
 def _extract_dialog(texts: list[str]) -> tuple[str, str, str]:
-    display = [t for t in texts if not _is_asset_or_var(t)]
+    display = [_clean_text(t) for t in texts if _clean_text(t) and not _is_asset_or_var(t)]
     if not display:
         return "", "", ""
 
