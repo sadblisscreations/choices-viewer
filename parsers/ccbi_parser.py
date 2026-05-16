@@ -933,11 +933,11 @@ def setup_scene(ccbi_path: Path, bg_dir: Path, tex_dir: Path) -> dict:
     }
 
 
-def render_scene_to_image(canvas: QImage, scene: dict, texcache: TextureCache) -> int:
+def render_scene_to_image(canvas: QImage, scene: dict, texcache: TextureCache, transparent_bg: bool = False) -> int:
     painter = QPainter(canvas)
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-    canvas.fill(QColor(15, 15, 26))
+    canvas.fill(Qt.GlobalColor.transparent if transparent_bg else QColor(15, 15, 26))
     render_scale = float(scene.get("render_scale", 1.0) or 1.0)
     painter.scale(render_scale, render_scale)
     screen_transform = painter.transform()
@@ -956,6 +956,7 @@ def render_scene_to_image(canvas: QImage, scene: dict, texcache: TextureCache) -
         screen_transform,
         scene.get("seq_id", 0),
         scene.get("time", 0.0),
+        transparent_bg,
         True,
         1.0,
     )
@@ -1043,6 +1044,8 @@ def _val_at(keys: list, t: float, base=None):
     if prev is nxt or nv is None or nxt.get("time") == prev.get("time"):
         return pv
     f = max(0.0, min(1.0, (t - prev.get("time", 0)) / (nxt.get("time", 0) - prev.get("time", 0))))
+    if isinstance(pv, bool) or isinstance(nv, bool):
+        return pv
     if isinstance(pv, (int, float)) and isinstance(nv, (int, float)):
         return pv + (nv - pv) * f
     if (
@@ -1129,7 +1132,16 @@ def _anchor_value(anchor):
     return 0.5, 0.5
 
 
-def _draw_particles(painter: QPainter, emitter: Emitter, texcache: TextureCache, scene: dict, scene_shift: float, screen_transform, opacity: float) -> int:
+def _draw_particles(
+    painter: QPainter,
+    emitter: Emitter,
+    texcache: TextureCache,
+    scene: dict,
+    scene_shift: float,
+    screen_transform,
+    opacity: float,
+    transparent_bg: bool = False,
+) -> int:
     count = 0
     painter.save()
     painter.setTransform(screen_transform)
@@ -1140,19 +1152,33 @@ def _draw_particles(painter: QPainter, emitter: Emitter, texcache: TextureCache,
         px = int(p.x + scene_shift - scene.get("pad_x", 0))
         py = int(p.y)
         hsz = sz // 2
-        surf = texcache.get(emitter.tex, sz, p.r, p.g, p.b, p.a * opacity, emitter.additive)
+        additive = emitter.additive and not transparent_bg
+        surf = texcache.get(emitter.tex, sz, p.r, p.g, p.b, p.a * opacity, additive)
         if surf:
-            if emitter.additive:
+            if additive:
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
             painter.drawImage(px - hsz, py - hsz, surf)
-            if emitter.additive:
+            if additive:
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         count += 1
     painter.restore()
     return count
 
 
-def _draw_node(painter: QPainter, node: dict, parent: dict, scene: dict, texcache: TextureCache, scene_shift: float, screen_transform, seq_id: int, t: float, is_root: bool = False, inherited_opacity: float = 1.0):
+def _draw_node(
+    painter: QPainter,
+    node: dict,
+    parent: dict,
+    scene: dict,
+    texcache: TextureCache,
+    scene_shift: float,
+    screen_transform,
+    seq_id: int,
+    t: float,
+    transparent_bg: bool = False,
+    is_root: bool = False,
+    inherited_opacity: float = 1.0,
+):
     base = _prop_values(node)
     anim = _anim_values(node, seq_id, t)
     props = {**base, **anim}
@@ -1162,6 +1188,13 @@ def _draw_node(painter: QPainter, node: dict, parent: dict, scene: dict, texcach
     sprite = props.get("displayFrame") or props.get("spriteFrame") or _sprite_value(node)
     asset = scene["assets"].get(_sprite_key(sprite))
     rel = str(scene.get("_ccbi_path", "")).lower()
+    if (
+        "bg_timeline_romance_int_door_portal_neutral" in rel
+        and node.get("_node_id") == 2
+        and scene.get("seq_id") == 2
+        and t < 5.4666666984558105
+    ):
+        props["opacity"] = 0
     if asset and "bg_overlay_regular_" in rel and "_spell" in rel and "_spell_icon" in asset.file.lower():
         props["position"] = {"x": 59, "y": 58, "type": 4}
         props["anchorPoint"] = (0.5, 0.5)
@@ -1194,17 +1227,23 @@ def _draw_node(painter: QPainter, node: dict, parent: dict, scene: dict, texcach
         painter.scale(1, -1)
         painter.drawImage(QRect(0, 0, max(1, round(w)), max(1, round(h))), asset.image)
         painter.restore()
-
     total_particles = 0
     emitter = scene.get("emitter_map", {}).get(node.get("_node_id"))
     if emitter is not None and opacity > 0.001:
-        total_particles += _draw_particles(painter, emitter, texcache, scene, scene_shift, screen_transform, opacity)
+        total_particles += _draw_particles(
+            painter, emitter, texcache, scene, scene_shift,
+            screen_transform, opacity, transparent_bg,
+        )
 
     child_parent = {"x": 0, "y": 0, "w": w or parent["w"], "h": h or parent["h"]}
     if node.get("class", "").lower() == "dklazysprite":
         child_parent["lazyScaleType"] = props.get("scaleType")
     child_opacity = opacity if props.get("cascadeOpacityEnabled") else inherited_opacity
     for child in node.get("children", []):
-        total_particles += _draw_node(painter, child, child_parent, scene, texcache, scene_shift, screen_transform, seq_id, t, False, child_opacity)
+        total_particles += _draw_node(
+            painter, child, child_parent, scene, texcache,
+            scene_shift, screen_transform, seq_id, t,
+            transparent_bg, False, child_opacity,
+        )
     painter.restore()
     return total_particles

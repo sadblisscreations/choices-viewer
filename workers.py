@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import numpy as np
 from PIL import Image as PILImage
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
@@ -239,11 +240,38 @@ class SheetPsdSaveWorker(QThread):
             self.done.emit("")
 
 
+class SceneLoadWorker(QThread):
+    done = pyqtSignal(int, object, str)
+
+    def __init__(self, request_id: int, ccbi_path: Path, bg_dir: Path, tex_dir: Path):
+        super().__init__()
+        self._request_id = request_id
+        self._ccbi_path = ccbi_path
+        self._bg_dir = bg_dir
+        self._tex_dir = tex_dir
+
+    def run(self):
+        try:
+            self.done.emit(self._request_id, setup_scene(self._ccbi_path, self._bg_dir, self._tex_dir), "")
+        except Exception as exc:
+            self.done.emit(self._request_id, None, str(exc))
+
+
 class SceneExportWorker(QThread):
     progress = pyqtSignal(int, int)
     done = pyqtSignal(str, str)
 
-    def __init__(self, ccbi_path: Path, bg_dir: Path, tex_dir: Path, seq_id: int, fmt: str, target: Path, fps: int = 24):
+    def __init__(
+        self,
+        ccbi_path: Path,
+        bg_dir: Path,
+        tex_dir: Path,
+        seq_id: int,
+        fmt: str,
+        target: Path,
+        fps: int = 24,
+        transparent_bg: bool = False,
+    ):
         super().__init__()
         self._ccbi_path = ccbi_path
         self._bg_dir = bg_dir
@@ -252,6 +280,7 @@ class SceneExportWorker(QThread):
         self._fmt = fmt
         self._target = target
         self._fps = max(1, fps)
+        self._transparent_bg = transparent_bg
 
     def run(self):
         try:
@@ -263,12 +292,9 @@ class SceneExportWorker(QThread):
                         scene["duration"] = max(0.001, float(seq.get("duration") or 1.0))
                         break
 
-            full_w = max(1, scene.get("canvas_w", CANVAS_W))
-            full_h = max(1, scene.get("canvas_h", CANVAS_H))
-            scale = min(1.0, 1280 / full_w, 720 / full_h)
-            scene["render_scale"] = scale
-            out_w = max(1, int(full_w * scale))
-            out_h = max(1, int(full_h * scale))
+            out_w = max(1, int(scene.get("canvas_w", CANVAS_W)))
+            out_h = max(1, int(scene.get("canvas_h", CANVAS_H)))
+            scene["render_scale"] = 1.0
             duration_s = max(0.001, float(scene.get("duration") or 1.0))
             frame_count = max(1, min(600, int(round(duration_s * self._fps))))
             dt = duration_s / frame_count
@@ -285,7 +311,7 @@ class SceneExportWorker(QThread):
                 for em in scene.get("emitters", []):
                     em.update(dt if i else 0.0)
                 canvas = QImage(out_w, out_h, QImage.Format.Format_ARGB32)
-                render_scene_to_image(canvas, scene, texcache)
+                render_scene_to_image(canvas, scene, texcache, self._transparent_bg and self._fmt != "GIF")
 
                 if self._fmt == "PNG":
                     canvas.save(str(self._target / f"frame_{i + 1:04d}.png"), "PNG")
@@ -303,8 +329,28 @@ class SceneExportWorker(QThread):
                 duration_ms = max(20, round(1000 / self._fps))
                 converted = []
                 for img in frames:
-                    p_img = img.quantize(colors=255, method=PILImage.Quantize.FASTOCTREE, dither=0)
-                    p_img.info["transparency"] = 0
+                    if self._transparent_bg:
+                        rgba = img.convert("RGBA")
+                        arr = np.array(rgba)
+                        bg = np.array([15, 15, 26], dtype=np.int16)
+                        rgb = arr[:, :, :3].astype(np.int16)
+                        keyed = np.max(np.abs(rgb - bg), axis=2) <= 4
+                        arr[:, :, 3] = np.where(keyed, 0, 255).astype(np.uint8)
+                        rgba = PILImage.fromarray(arr, "RGBA")
+                        alpha = rgba.getchannel("A")
+                        p_img = rgba.convert("RGB").quantize(
+                            colors=255, method=PILImage.Quantize.FASTOCTREE, dither=0
+                        )
+                        palette = p_img.getpalette() or []
+                        if len(palette) < 768:
+                            palette.extend([0] * (768 - len(palette)))
+                        palette[765:768] = [0, 0, 0]
+                        p_img.putpalette(palette)
+                        mask = alpha.point(lambda a: 255 if a < 16 else 0)
+                        p_img.paste(255, mask=mask)
+                        p_img.info["transparency"] = 255
+                    else:
+                        p_img = img.quantize(colors=255, method=PILImage.Quantize.FASTOCTREE, dither=0)
                     converted.append(p_img)
                 converted[0].save(
                     str(self._target), format="GIF", save_all=True,

@@ -5,20 +5,20 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QImage, QPainter, QColor
 from PyQt6.QtWidgets import (
-    QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QMessageBox, QPushButton,
+    QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
+    QListWidget, QListWidgetItem, QMessageBox, QProgressBar, QPushButton,
     QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
-from ..parsers.ccbi_parser import CANVAS_W, CANVAS_H, setup_scene, render_scene_to_image, TextureCache
-from ..workers import SceneExportWorker
+from ..parsers.ccbi_parser import CANVAS_W, CANVAS_H, render_scene_to_image, TextureCache
+from ..workers import SceneExportWorker, SceneLoadWorker
 from .style import TEXT
 from . import separator
 from .characters import HighlightingComboBox
 
 CANVAS_BG = QColor(15, 15, 26)
-MAX_PREVIEW_W = 1280
-MAX_PREVIEW_H = 720
+MAX_PREVIEW_W = 960
+MAX_PREVIEW_H = 540
 
 
 class ScenePreview(QWidget):
@@ -29,13 +29,20 @@ class ScenePreview(QWidget):
         self._canvas = QImage(CANVAS_W, CANVAS_H, QImage.Format.Format_ARGB32)
         self._canvas.fill(CANVAS_BG)
         self._last_time = time.perf_counter()
+        self._last_update_time = 0.0
+        self._last_render_ms = 0.0
         self._particle_count = 0
         self._dirty = True
+        self._transparent_bg = False
         self.setMinimumSize(320, 260)
         self.setStyleSheet("background: #0f0f1a;")
 
     def set_scene(self, ccbi_path: Path, bg_dir: Path, tex_dir: Path):
-        self._scene = setup_scene(ccbi_path, bg_dir, tex_dir)
+        from ..parsers.ccbi_parser import setup_scene
+        self.set_prepared_scene(setup_scene(ccbi_path, bg_dir, tex_dir), tex_dir)
+
+    def set_prepared_scene(self, scene: dict, tex_dir: Path):
+        self._scene = scene
         self._texcache = TextureCache(tex_dir)
         full_w = max(1, self._scene.get("canvas_w", CANVAS_W))
         full_h = max(1, self._scene.get("canvas_h", CANVAS_H))
@@ -48,6 +55,8 @@ class ScenePreview(QWidget):
         )
         self._canvas.fill(CANVAS_BG)
         self._last_time = time.perf_counter()
+        self._last_update_time = 0.0
+        self._last_render_ms = 0.0
         self._dirty = True
         self.update()
 
@@ -60,6 +69,13 @@ class ScenePreview(QWidget):
 
     def start_animation(self):
         self._last_time = time.perf_counter()
+        self._last_update_time = 0.0
+
+    def render_ms(self) -> float:
+        return self._last_render_ms
+
+    def set_transparent_background(self, enabled: bool):
+        self._transparent_bg = enabled
 
     def particle_count(self) -> int:
         return self._particle_count
@@ -114,6 +130,17 @@ class ScenePreview(QWidget):
         self._scene["time"] = (self._scene.get("time", 0.0) + dt) % max(0.001, self._scene.get("duration", 1.0))
         for em in self._scene["emitters"]:
             em.update(dt)
+
+        if self._last_render_ms > 45:
+            frame_interval = 1 / 15
+        elif self._last_render_ms > 28:
+            frame_interval = 1 / 20
+        else:
+            frame_interval = 1 / 30
+        if now - self._last_update_time < frame_interval:
+            return
+
+        self._last_update_time = now
         self._dirty = True
         self.update()
 
@@ -122,7 +149,9 @@ class ScenePreview(QWidget):
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
         if self._scene and self._texcache and self._dirty:
+            start = time.perf_counter()
             self._particle_count = render_scene_to_image(self._canvas, self._scene, self._texcache)
+            self._last_render_ms = (time.perf_counter() - start) * 1000
             self._dirty = False
 
         src = QRect(0, 0, self._canvas.width(), self._canvas.height())
@@ -149,6 +178,14 @@ class ScenesTab(QWidget):
         self._scene_books_cache = {}
         self._rebuild_scene_book_index()
         self._export_worker = None
+        self._scene_load_workers = []
+        self._scene_load_request = 0
+        self._pending_scene_load = None
+        self._last_info_update = 0.0
+
+        self._selection_timer = QTimer(self)
+        self._selection_timer.setSingleShot(True)
+        self._selection_timer.timeout.connect(self._load_pending_scene)
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_tick)
@@ -237,12 +274,20 @@ class ScenesTab(QWidget):
         self._seq_combo.setMinimumWidth(280)
         self._seq_combo.currentIndexChanged.connect(self._on_sequence_changed)
         ctrl_row.addWidget(self._seq_combo, stretch=1)
+        self._transparent_chk = QCheckBox("Transparent background")
+        self._transparent_chk.toggled.connect(self._on_transparency_changed)
+        ctrl_row.addWidget(self._transparent_chk)
         self._export_combo = QComboBox()
         self._export_combo.addItems(["PNG Sequence", "GIF", "PSD"])
         ctrl_row.addWidget(self._export_combo)
         ctrl_row.addWidget(self._export_btn)
         ctrl_row.addStretch()
         rv.addLayout(ctrl_row)
+
+        self._progress = QProgressBar()
+        self._progress.setVisible(False)
+        self._progress.setTextVisible(True)
+        rv.addWidget(self._progress)
 
         splitter.addWidget(left)
         splitter.addWidget(right)
@@ -355,6 +400,8 @@ class ScenesTab(QWidget):
             self._preview._scene = None
             self._seq_combo.clear()
             self._export_btn.setEnabled(False)
+            self._scene_load_request += 1
+            self._hide_progress()
             self._preview.update()
 
     def _on_select(self, current, _prev=None):
@@ -365,17 +412,65 @@ class ScenesTab(QWidget):
         self._title_lbl.setText(scene_name)
         bg_dir = self._assets / "backgrounds" / "large"
         tex_dir = self._assets / "ccbi_images" / "2x"
-        try:
-            self._preview.set_scene(ccbi_path, bg_dir, tex_dir)
-            self._populate_sequences()
-            self._preview.start_animation()
-            self._export_btn.setEnabled(True)
-        except Exception as e:
-            QMessageBox.warning(self, "Error Loading Scene", f"Failed to parse CCBI file:\n{ccbi_path.name}\n\n{e}")
+        self._pending_scene_load = (ccbi_path, bg_dir, tex_dir)
+        self._selection_timer.start(90)
+
+    def _load_pending_scene(self):
+        if self._pending_scene_load is None:
+            return
+        ccbi_path, bg_dir, tex_dir = self._pending_scene_load
+        self._pending_scene_load = None
+        self._start_scene_load(ccbi_path, bg_dir, tex_dir)
+
+    def _start_scene_load(self, ccbi_path: Path, bg_dir: Path, tex_dir: Path):
+        self._selection_timer.stop()
+        self._scene_load_request += 1
+        request_id = self._scene_load_request
+        self._preview._scene = None
+        self._seq_combo.clear()
+        self._export_btn.setEnabled(False)
+        self._info_lbl.setText("Loading scene...")
+        self._show_busy_progress("Loading scene...")
+        self._preview.update()
+
+        worker = SceneLoadWorker(request_id, ccbi_path, bg_dir, tex_dir)
+        self._scene_load_workers.append(worker)
+        worker.done.connect(
+            lambda rid, scene, error, td=tex_dir, cp=ccbi_path:
+            self._on_scene_loaded(rid, scene, error, td, cp)
+        )
+        worker.finished.connect(lambda w=worker: self._cleanup_scene_loader(w))
+        worker.start()
+
+    def _cleanup_scene_loader(self, worker: SceneLoadWorker):
+        if worker in self._scene_load_workers:
+            self._scene_load_workers.remove(worker)
+
+    def _on_scene_loaded(
+        self,
+        request_id: int,
+        scene,
+        error: str,
+        tex_dir: Path,
+        ccbi_path: Path,
+    ):
+        if request_id != self._scene_load_request:
+            return
+        if error or not scene:
+            QMessageBox.warning(self, "Error Loading Scene", f"Failed to parse CCBI file:\n{ccbi_path.name}\n\n{error}")
             self._preview._scene = None
             self._seq_combo.clear()
             self._export_btn.setEnabled(False)
+            self._hide_progress()
             self._preview.update()
+            return
+
+        self._preview.set_prepared_scene(scene, tex_dir)
+        self._preview.set_transparent_background(self._transparent_chk.isChecked())
+        self._populate_sequences()
+        self._preview.start_animation()
+        self._export_btn.setEnabled(True)
+        self._hide_progress()
 
     def _prev_scene(self):
         row = self._list.currentRow()
@@ -388,8 +483,15 @@ class ScenesTab(QWidget):
             self._list.setCurrentRow(row + 1)
 
     def _restart(self):
-        self._preview.restart()
-        self._populate_sequences()
+        item = self._list.currentItem()
+        if item is None:
+            return
+        ccbi_path = item.data(Qt.ItemDataRole.UserRole)
+        self._start_scene_load(
+            ccbi_path,
+            self._assets / "backgrounds" / "large",
+            self._assets / "ccbi_images" / "2x",
+        )
 
     def _populate_sequences(self):
         self._seq_combo.blockSignals(True)
@@ -412,6 +514,24 @@ class ScenesTab(QWidget):
         seq_id = self._seq_combo.itemData(index)
         if seq_id is not None:
             self._preview.set_sequence(int(seq_id))
+
+    def _on_transparency_changed(self, enabled: bool):
+        self._preview.set_transparent_background(enabled)
+
+    def _show_busy_progress(self, text: str):
+        self._progress.setRange(0, 0)
+        self._progress.setValue(0)
+        self._progress.setFormat(text)
+        self._progress.setVisible(True)
+
+    def _show_export_progress(self, done: int, total: int):
+        self._progress.setRange(0, max(1, total))
+        self._progress.setValue(done)
+        self._progress.setFormat(f"Exporting scene: {done}/{total}")
+        self._progress.setVisible(True)
+
+    def _hide_progress(self):
+        self._progress.setVisible(False)
 
     def _safe_scene_name(self) -> str:
         item = self._list.currentItem()
@@ -455,20 +575,27 @@ class ScenesTab(QWidget):
         bg_dir = self._assets / "backgrounds" / "large"
         tex_dir = self._assets / "ccbi_images" / "2x"
         self._export_btn.setEnabled(False)
-        self._info_lbl.setText("Exporting scene...")
+        self._show_busy_progress("Preparing export...")
         self._export_worker = SceneExportWorker(
-            ccbi_path, bg_dir, tex_dir, self._preview.current_sequence_id(), fmt, target
+            ccbi_path,
+            bg_dir,
+            tex_dir,
+            self._preview.current_sequence_id(),
+            fmt,
+            target,
+            transparent_bg=self._transparent_chk.isChecked(),
         )
         self._export_worker.progress.connect(self._on_export_progress)
         self._export_worker.done.connect(self._on_export_done)
         self._export_worker.start()
 
     def _on_export_progress(self, done: int, total: int):
-        self._info_lbl.setText(f"Exporting scene: {done}/{total}")
+        self._show_export_progress(done, total)
 
     def _on_export_done(self, path: str, error: str):
         self._export_btn.setEnabled(self._preview._scene is not None)
         self._export_worker = None
+        self._hide_progress()
         if path:
             QMessageBox.information(self, "Saved", f"Saved scene export to:\n{path}")
         else:
@@ -479,6 +606,10 @@ class ScenesTab(QWidget):
         if self._export_worker is not None:
             return
         if self._preview._scene:
+            now = time.perf_counter()
+            if now - self._last_info_update < 0.25:
+                return
+            self._last_info_update = now
             active = self._preview.active_emitters()
             total = self._preview.total_emitters()
             parts = self._preview.particle_count()
