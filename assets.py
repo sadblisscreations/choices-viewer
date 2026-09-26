@@ -287,19 +287,23 @@ def discover_ccbi_scenes(assets: Path, on_progress=None) -> list:
 
 
 _PORTRAIT_REF_RE = re.compile(rb"(portrait_[a-z0-9_]+?)-v\d+\.(?:png|plist)")
+_CUSTOM_ITEM_REF_RE = re.compile(rb"(item_[a-z0-9_]+?)-v\d+\.(?:png|plist)")
 _CCBI_REF_RE = re.compile(rb"/assets/([a-z0-9_./\\-]+?)-v\d+\.ccbi")
 
 
 def discover_character_books(books_root: Path, on_progress=None) -> dict:
     """
     For each book directory under *books_root*, scan every chapter .protobin
-    for portrait file references and return {book_dir_name: set(portrait_stem)}.
+    for portrait and custom-character item references and return
+    {book_dir_name: set(asset_stem)}.
 
     Each chapter's protobin field-3 asset manifest contains URLs like
     `…/assets/portraits/{res}/portrait_anime_main_jake-v01.png` for every
     portrait, NPC, animal, and custom-builder layer used in that chapter.
     Extracting the version-less stems gives a complete and exact set of
-    portraits-per-book — no heuristics, no false positives.
+    character-assets-per-book — no heuristics, no false positives. Customizable
+    protagonists are assembled from `item_*` layers instead of a `portrait_*`
+    atlas, so both forms must be indexed.
 
     Cached by file path + mtime; only changed/new chapters are re-parsed.
     """
@@ -313,7 +317,9 @@ def discover_character_books(books_root: Path, on_progress=None) -> dict:
         for pbin in sorted(bdir.glob("*.protobin")):
             candidates.append((bdir.name, pbin))
 
-    cache_file = _cache_path(books_root, "char_books")
+    # v3 also indexes item_* custom-character layers. Keep it separate from the
+    # old portrait-only cache so existing users receive the new data immediately.
+    cache_file = _cache_path(books_root, "char_books_v3")
     cache = _load_cache(cache_file)
 
     def _stems_for(pbin):
@@ -321,7 +327,9 @@ def discover_character_books(books_root: Path, on_progress=None) -> dict:
             data = pbin.read_bytes()
         except OSError:
             return []
-        return sorted({m.group(1).decode("ascii") for m in _PORTRAIT_REF_RE.finditer(data)})
+        stems = {m.group(1).decode("ascii") for m in _PORTRAIT_REF_RE.finditer(data)}
+        stems.update(m.group(1).decode("ascii") for m in _CUSTOM_ITEM_REF_RE.finditer(data))
+        return sorted(stems)
 
     to_parse = []
     to_parse_idx = []
