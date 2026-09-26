@@ -33,6 +33,7 @@ Point it at the `dlc_cache` folder and it can display character portraits, custo
 ### Custom
 
 - Build custom character outfits from body, face, hair, clothing, accessories, props, tattoos, and other layers.
+- Filter portrait-based character layers by book.
 - Preview the current build live.
 - Switch between supported emotions.
 - Export custom builds as PNG, JPEG, or layered PSD.

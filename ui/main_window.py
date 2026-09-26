@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         tabs.setDocumentMode(True)
 
         self._chars_tab   = CharactersTab(assets, characters, char_books or {})
-        self._custom_tab  = CustomBuilderTab(assets, custom_items)
+        self._custom_tab  = CustomBuilderTab(assets, custom_items, char_books or {})
         self._scenes_tab  = ScenesTab(assets, ccbi_scenes, scene_books or {})
         self._books_tab   = BooksTab(books)
         self._about_tab   = AboutTab()
@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self._custom_tab.update_assets(
             assets,
             {**discover_custom_items(assets), **discover_portrait_layers(assets)},
+            char_books,
         )
         self._scenes_tab.update_assets(assets, discover_ccbi_scenes(assets), scene_books)
         self._books_tab.refresh(books_root, discover_books(books_root))

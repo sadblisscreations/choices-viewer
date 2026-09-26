@@ -52,9 +52,11 @@ class PreviewLabel(QLabel):
 
 
 class CustomBuilderTab(QWidget):
-    def __init__(self, assets: Path, custom_items: dict):
+    def __init__(self, assets: Path, custom_items: dict, char_books: dict | None = None):
         super().__init__()
+        self._assets           = assets
         self._items            = custom_items
+        self._char_books       = char_books or {}
         self._worker           = None
         self._save_worker      = None
         self._selected_emotion = "NEUTRAL"
@@ -66,9 +68,8 @@ class CustomBuilderTab(QWidget):
         self._refresh_timer.timeout.connect(self._do_refresh)
 
         self._build_ui()
-
-        if custom_items:
-            self._type_list.setCurrentRow(0)
+        self._rebuild_book_combo()
+        self._rebuild_type_list()
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -87,6 +88,15 @@ class CustomBuilderTab(QWidget):
         left_vbox.setContentsMargins(8, 8, 8, 8)
         left_vbox.setSpacing(6)
 
+        book_hdr = QLabel("BOOK")
+        book_hdr.setStyleSheet("font-size: 10px; font-weight: bold; color: " + TEXT + "; letter-spacing: 1px;")
+        left_vbox.addWidget(book_hdr)
+
+        self._book_combo = QComboBox()
+        self._book_combo.setMaxVisibleItems(20)
+        self._book_combo.currentIndexChanged.connect(self._on_book_changed)
+        left_vbox.addWidget(self._book_combo)
+
         type_hdr = QLabel("CHARACTER TYPE")
         type_hdr.setStyleSheet("font-size: 10px; font-weight: bold; color: " + TEXT + "; letter-spacing: 1px;")
         left_vbox.addWidget(type_hdr)
@@ -95,10 +105,6 @@ class CustomBuilderTab(QWidget):
         self._type_list.setMinimumHeight(80)
         self._type_list.setMaximumHeight(160)
         self._type_list.setUniformItemSizes(True)
-        for ct in sorted(self._items.keys()):
-            item = QListWidgetItem(self._fmt_type(ct))
-            item.setData(Qt.ItemDataRole.UserRole, ct)
-            self._type_list.addItem(item)
         self._type_list.currentItemChanged.connect(self._on_type_changed)
         left_vbox.addWidget(self._type_list)
 
@@ -266,25 +272,106 @@ class CustomBuilderTab(QWidget):
         rest   = parts[1].replace("_", " ").title() if len(parts) > 1 else ""
         return f"{gender} {rest}".strip()
 
-    def update_assets(self, assets: Path, custom_items: dict):
-        self._items = custom_items
+    @staticmethod
+    def _portrait_stem(entry: tuple) -> str:
+        """Return the version-less atlas stem used by the chapter book index."""
+        _label, plist, _png = entry
+        return Path(plist).stem.split("-v")[0]
+
+    @staticmethod
+    def _book_display(book: str) -> str:
+        return book.removeprefix("book_").replace("_", " ").strip().title()
+
+    def _available_portrait_stems(self) -> set[str]:
+        return {
+            self._portrait_stem(entry)
+            for slots in self._items.values()
+            for entries in slots.values()
+            for entry in entries
+            if self._portrait_stem(entry).startswith("portrait_")
+        }
+
+    def _rebuild_book_combo(self):
+        current = self._book_combo.currentData() if self._book_combo.count() else ""
+        available = self._available_portrait_stems()
+
+        self._book_combo.blockSignals(True)
+        self._book_combo.clear()
+        self._book_combo.addItem("All Books", "")
+        for book in sorted(self._char_books, key=self._book_display):
+            count = len(available.intersection(self._char_books.get(book, set())))
+            self._book_combo.addItem(f"{self._book_display(book)} ({count})", book)
+        if current:
+            index = self._book_combo.findData(current)
+            if index >= 0:
+                self._book_combo.setCurrentIndex(index)
+        self._book_combo.blockSignals(False)
+
+    def _filtered_slots(self, char_type: str) -> dict:
+        slots = self._items.get(char_type, {})
+        book = self._book_combo.currentData() or ""
+        if not book:
+            return slots
+
+        allowed = self._char_books.get(book, set())
+        return {
+            slot: [entry for entry in entries if self._portrait_stem(entry) in allowed]
+            for slot, entries in slots.items()
+        }
+
+    def _rebuild_type_list(self):
+        current = self._type_list.currentItem()
+        current_type = current.data(Qt.ItemDataRole.UserRole) if current else None
+        visible_types = [
+            char_type for char_type in sorted(self._items)
+            if any(self._filtered_slots(char_type).values())
+        ]
+
         self._type_list.blockSignals(True)
         self._type_list.clear()
-        for ct in sorted(custom_items.keys()):
-            item = QListWidgetItem(self._fmt_type(ct))
-            item.setData(Qt.ItemDataRole.UserRole, ct)
+        restore_row = 0
+        for char_type in visible_types:
+            item = QListWidgetItem(self._fmt_type(char_type))
+            item.setData(Qt.ItemDataRole.UserRole, char_type)
             self._type_list.addItem(item)
+            if char_type == current_type:
+                restore_row = self._type_list.count() - 1
         self._type_list.blockSignals(False)
+
         if self._type_list.count():
-            self._type_list.setCurrentRow(0)
+            self._type_list.setCurrentRow(restore_row)
+        else:
+            self._clear_slot_combos()
+            self._schedule_refresh()
+
+    def _clear_slot_combos(self):
+        for combo in self._slot_combos.values():
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("— None —", None)
+            combo.setEnabled(False)
+            combo.blockSignals(False)
+
+    def _on_book_changed(self, _index: int):
+        self._rebuild_type_list()
+
+    def update_assets(self, assets: Path, custom_items: dict, char_books: dict | None = None):
+        self._assets = assets
+        self._items = custom_items
+        if char_books is not None:
+            self._char_books = char_books
+        self._rebuild_book_combo()
+        self._rebuild_type_list()
 
     # ── Slot population ───────────────────────────────────────────────────────
 
     def _on_type_changed(self, current, _prev=None):
         if current is None:
+            self._clear_slot_combos()
+            self._schedule_refresh()
             return
         ct    = current.data(Qt.ItemDataRole.UserRole)
-        slots = self._items.get(ct, {})
+        slots = self._filtered_slots(ct)
 
         for slot, combo in self._slot_combos.items():
             combo.blockSignals(True)
